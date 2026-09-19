@@ -1,0 +1,117 @@
+{
+  "lstm_nans": 0,
+  "ctx_nans": 0,
+  "lstm_shape": [
+    48000,
+    9
+  ],
+  "ctx_shape": [
+    2000,
+    8
+  ],
+  "lstm_dtypes": {
+    "loan_id": "int64",
+    "month": "int64",
+    "salary_delay_days_z": "float64",
+    "discretionary_spend_z": "float64",
+    "account_balance_z": "float64",
+    "savings_balance_z": "float64",
+    "delta_account_balance": "float64",
+    "delta_savings_balance": "float64",
+    "emi_status_enc": "int8"
+  },
+  "ctx_dtypes": {
+    "loan_id": "int64",
+    "salary_stability_idx": "float64",
+    "salary_delay_trend": "float64",
+    "savings_slope": "float64",
+    "savings_volatility": "float64",
+    "cashflow_compression": "float64",
+    "emi_stress_count": "int64",
+    "seq_len": "int64"
+  },
+  "wrong_length_count": 0,
+  "high_stress_mean_cf": 1.036,
+  "spot_checks": [
+    {
+      "loan_id": 898521,
+      "seq_len": 24,
+      "emi_stress_count": 11,
+      "cashflow_compression": 1.019,
+      "salary_delay_trend": 0.1204,
+      "savings_slope": -33.835
+    },
+    {
+      "loan_id": 955235,
+      "seq_len": 24,
+      "emi_stress_count": 11,
+      "cashflow_compression": 1.0278,
+      "salary_delay_trend": 0.2026,
+      "savings_slope": -36.4349
+    },
+    {
+      "loan_id": 221937,
+      "seq_len": 24,
+      "emi_stress_count": 10,
+      "cashflow_compression": 1.0344,
+      "salary_delay_trend": 0.1109,
+      "savings_slope": -23.872
+    },
+    {
+      "loan_id": 951552,
+      "seq_len": 24,
+      "emi_stress_count": 10,
+      "cashflow_compression": 1.0282,
+      "salary_delay_trend": 0.1513,
+      "savings_slope": -70.9969
+    },
+    {
+      "loan_id": 242404,
+      "seq_len": 24,
+      "emi_stress_count": 9,
+      "cashflow_compression": 1.0874,
+      "salary_delay_trend": 0.1543,
+      "savings_slope": 14.6521
+    },
+    {
+      "loan_id": 7934,
+      "seq_len": 24,
+      "emi_stress_count": 0,
+      "cashflow_compression": 1.029,
+      "salary_delay_trend": 0.0,
+      "savings_slope": 11.1028
+    },
+    {
+      "loan_id": 10043,
+      "seq_len": 24,
+      "emi_stress_count": 0,
+      "cashflow_compression": 1.1,
+      "salary_delay_trend": 0.0009,
+      "savings_slope": 15.4319
+    },
+    {
+      "loan_id": 15586,
+      "seq_len": 24,
+      "emi_stress_count": 0,
+      "cashflow_compression": 0.9529,
+      "salary_delay_trend": 0.0,
+      "savings_slope": 39.7913
+    },
+    {
+      "loan_id": 20653,
+      "seq_len": 24,
+      "emi_stress_count": 0,
+      "cashflow_compression": 0.9896,
+      "salary_delay_trend": 0.0039,
+      "savings_slope": 86.7994
+    },
+    {
+      "loan_id": 28482,
+      "seq_len": 24,
+      "emi_stress_count": 0,
+      "cashflow_compression": 0.9668,
+      "salary_delay_trend": 0.0,
+      "savings_slope": 50.4231
+    }
+  ]
+}

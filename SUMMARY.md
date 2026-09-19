@@ -5,7 +5,7 @@
 
 ---
 
-## Current Status — Phase 3A (Synthetic Behavioural Sequence Generator) — 🔄 In Progress
+## Current Status — Phase 4 (Feature Engineering) — 🔄 In Progress  |  Phase 3A Full Run — 🔄 Running
 
 ---
 
@@ -162,12 +162,48 @@ python src/data_generation/generate_behavioural_sequences.py
 
 ---
 
+### Phase 4 — Feature Engineering 🔄 (in progress)
+
+#### Script: `src/features/build_features.py`
+
+Transforms long-format synthetic sequences into two artefacts the LSTM needs:
+
+**1. `data/processed/lstm_sequences.parquet`** — per-month features (LSTM time-series input)
+
+| Feature | How derived |
+|---|---|
+| `salary_delay_days_z` | Per-borrower z-score (borrower's own mean/std, not global) |
+| `discretionary_spend_z` | Per-borrower z-score |
+| `account_balance_z` | Per-borrower z-score |
+| `savings_balance_z` | Per-borrower z-score |
+| `delta_account_balance` | Month-over-month Δ in account_balance |
+| `delta_savings_balance` | Month-over-month Δ in savings_balance |
+| `emi_status_enc` | Ordinal: on_time=0, delayed=1, missed=2 |
+
+**2. `data/processed/sequence_context_features.parquet`** — one row per borrower (static context fed alongside LSTM)
+
+| Feature | How derived |
+|---|---|
+| `salary_stability_idx` | std / mean of `salary_credit` over sequence |
+| `salary_delay_trend` | Linear regression slope of `salary_delay_days` over time |
+| `savings_slope` | Linear regression slope of `savings_balance` |
+| `savings_volatility` | std of `savings_balance` |
+| `cashflow_compression` | mean spend in first half / mean spend in second half |
+| `emi_stress_count` | count of delayed + missed months |
+| `seq_len` | actual sequence length (2–24) — used for LSTM masking via `pack_padded_sequence` |
+
+**Variable-length handling:** post-pad to max_len=24 with zeros; `seq_len` stored for masking — LSTM never processes padded timesteps.
+
+**Validation checks:** zero NaNs after normalisation, spot-check 5–10 shock borrowers, shape/dtype report for both outputs.
+
+---
+
 | Phase | Description | Status |
 |---|---|---|
 | Phase 1 | Data ingestion (`load_raw.py`) + cleaning (`clean_lending_club.py`) | ✅ Complete |
 | Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | ✅ Complete — AUC 0.7345 (paper: 0.731) |
-| Phase 3A | Synthetic behavioural sequence generator (`generate_behavioural_sequences.py`) | 🔄 In Progress |
-| Phase 4 | Feature engineering — behavioural + static features (`src/features/`) | ⏳ |
+| Phase 3A (full run) | Full 1.87M-borrower generation running as background job | 🔄 Running |
+| Phase 4 | Feature engineering — LSTM sequences + sequence-level context features | 🔄 In Progress |
 | Phase 5 | Temporal model — LSTM + attention (`src/models/`) | ⏳ |
 | Phase 6 | Explainability — SHAP + fuzzy surrogate (`src/explainability/`) | ⏳ |
 | Phase 7 | Intervention layer + dashboard (`src/intervention/`, `dashboard/`) | ⏳ |

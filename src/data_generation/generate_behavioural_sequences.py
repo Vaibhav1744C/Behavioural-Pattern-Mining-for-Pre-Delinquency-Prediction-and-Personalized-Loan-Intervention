@@ -364,7 +364,7 @@ def run_validation(
     print(f"  Flat trajectories (stress std<1e-4, sequences >1 month): {flat}  (must be 0)")
     assert flat == 0, f"{flat} borrowers have completely flat stress trajectories"
 
-    print("  All sanity checks passed ✓")
+    print("  All sanity checks passed [OK]")
 
     # --- Save validation plots -----------------------------------------------
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
