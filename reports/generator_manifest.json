@@ -1,0 +1,12 @@
+{
+  "alpha": 0.6,
+  "p_shock_default": 0.35,
+  "p_shock_nondefault": 0.12,
+  "n_borrowers": 1879234,
+  "max_sequence_length": 24,
+  "chunk_size": 50000,
+  "random_seed": 42,
+  "main_run_rows": 45101616,
+  "ablation_run_rows": 45101616,
+  "generated_at": "2026-09-19T12:38:32.493192Z"
+}
