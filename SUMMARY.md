@@ -5,7 +5,7 @@
 
 ---
 
-## Current Status — Phase 2 (Baseline XGBoost Reproduction) — ✅ Complete
+## Current Status — Phase 3A (Synthetic Behavioural Sequence Generator) — 🔄 In Progress
 
 ---
 
@@ -108,13 +108,65 @@ Faithfully reproduces the XGBoost baseline from the base paper. All 6 correction
 
 ---
 
-## What's Next
+### Phase 3A — Synthetic Behavioural Sequence Generator 🔄 (in progress)
+
+#### Script: `src/data_generation/generate_behavioural_sequences.py`
+
+Generates synthetic monthly behavioural sequences per borrower to feed the temporal model (Phase 5). Lending Club has no transaction-level data — this generator creates it from the static features using a principled stress model.
+
+#### Core design (per Claude's spec)
+
+**Stress signal (avoids circularity and leakage):**
+```
+stress[t] = alpha * static_stress + (1 - alpha) * shock_stress[t]
+```
+- `static_stress` — borrower-level constant from `dti`, `revol_util`, `grade` (scaled 0-1)
+- `shock_stress[t]` — independent shock events, onset random, ramp over 2-3 months
+- `early_default` label used ONLY to set shock probability (`p_shock_default=0.35` vs `p_shock_nondefault=0.12`) — never to directly set any feature value
+- `alpha=0.6` for main run; companion run at `alpha=0` (pure independent shock) saved as ablation sanity check
+
+**Output schema** — long format, one row per (loan_id, month):
+
+| Column | Description |
+|---|---|
+| `loan_id` | join key back to static data |
+| `month` | 0-indexed sequence position |
+| `salary_credit` | monthly salary (AR(1) noise ~5% of mean) |
+| `salary_delay_days` | days late vs nominal credit date (rises with stress) |
+| `account_balance` | cumulative running balance |
+| `savings_balance` | declines under sustained stress |
+| `discretionary_spend` | spikes early on stress onset, compresses later |
+| `emi_status` | `on_time` / `delayed` / `missed` (logistic fn of stress) |
+| `stress_level` | internal signal, kept for validation plots |
+
+**Key implementation details:**
+- AR(1) noise throughout (`noise[t] = 0.7 * noise[t-1] + N(0,σ)`) — real financial series are autocorrelated
+- Sequence length = `min(term_months, 24)` per borrower
+- Chunked incremental parquet write (same pattern as `load_raw.py`) to handle 1.87M borrowers without OOM
+- Validation on 1,000-5,000 borrower sample before full run — trajectory plots saved to `reports/generator_validation_plots/`
+- Manifest saved to `reports/generator_manifest.json` for reproducibility
+
+#### Outputs
+| File | Description |
+|---|---|
+| `data/synthetic/behavioural_sequences.parquet` | Full long-format sequences (main run, alpha=0.6) |
+| `data/synthetic/behavioural_sequences_alpha0.parquet` | Ablation run (alpha=0, pure shock) |
+| `reports/generator_manifest.json` | Run parameters for reproducibility |
+| `reports/generator_validation_plots/` | Trajectory plots for 10-15 sample borrowers |
+
+#### To run
+```bash
+pip install matplotlib pyarrow
+python src/data_generation/generate_behavioural_sequences.py
+```
+
+---
 
 | Phase | Description | Status |
 |---|---|---|
 | Phase 1 | Data ingestion (`load_raw.py`) + cleaning (`clean_lending_club.py`) | ✅ Complete |
 | Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | ✅ Complete — AUC 0.7345 (paper: 0.731) |
-| Phase 3 | Synthetic behavioural data generator (`src/data_generation/`) | ⏳ |
+| Phase 3A | Synthetic behavioural sequence generator (`generate_behavioural_sequences.py`) | 🔄 In Progress |
 | Phase 4 | Feature engineering — behavioural + static features (`src/features/`) | ⏳ |
 | Phase 5 | Temporal model — LSTM + attention (`src/models/`) | ⏳ |
 | Phase 6 | Explainability — SHAP + fuzzy surrogate (`src/explainability/`) | ⏳ |
