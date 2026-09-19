@@ -5,7 +5,40 @@
 
 ---
 
-## Current Status — Phase 1 (Data Ingestion & Cleaning) — ✅ Complete
+## Current Status — Phase 2 (Baseline XGBoost Reproduction) — 🔄 In Progress
+
+---
+
+### Phase 2 — Baseline XGBoost Reproduction 🔄 (in progress)
+
+#### Script: `src/models/baseline_xgboost.py`
+
+Faithfully reproduces the XGBoost baseline from the base paper. All 6 corrections from code review applied:
+
+| # | Correction | Detail |
+|---|---|---|
+| 1 | **70/30 split** | Paper Section 4.4 states this explicitly — not 80/20 |
+| 2 | **Mixed encoding** | `grade`, `sub_grade`, `emp_length` → ordinal/label encoded (preserves ordering); `home_ownership`, `purpose`, `verification_status`, etc. → one-hot |
+| 3 | **No imbalance correction as default** | Paper Table 4: plain XGBoost (AUC 0.731) beats SMOTE (0.729), oversampling (0.662), undersampling (0.663). Vanilla is primary; `scale_pos_weight` runs as a labeled secondary comparison |
+| 4 | **Paper's exact hyperparameters** | `max_depth=6`, `min_child_weight=5`, `gamma=10`, `objective='binary:logistic'`, `n_estimators=300` |
+| 5 | **Date columns → numeric** | `issue_d` and `earliest_cr_line` converted to months-since-reference (Jan 2007), not one-hot encoded |
+| 6 | **Full pipeline serialized** | Fitted sklearn `Pipeline` (imputer + encoder + model) saved to `src/models/xgb_baseline_pipeline.pkl` — not raw XGBoost model alone — for leak-free Phase 6 SHAP/surrogate use |
+
+#### Outputs (once run)
+
+| File | Description |
+|---|---|
+| `src/models/xgb_baseline_pipeline.pkl` | Full fitted pipeline for Phase 6 |
+| `data/processed/X_test.parquet` | Held-out test features for Phase 6 |
+| `data/processed/y_test.parquet` | Held-out test labels for Phase 6 |
+| `reports/baseline_results.json` | AUC, F1, precision, recall vs paper targets |
+
+#### To run
+```bash
+pip install xgboost scikit-learn
+python src/models/baseline_xgboost.py
+```
+Paper target: **AUC-ROC 0.731**
 
 ---
 
@@ -73,7 +106,7 @@
 | Phase | Description | Status |
 |---|---|---|
 | Phase 1 | Data ingestion (`load_raw.py`) + cleaning (`clean_lending_club.py`) | ✅ Complete |
-| Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | ⏳ |
+| Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | 🔄 In Progress |
 | Phase 3 | Synthetic behavioural data generator (`src/data_generation/`) | ⏳ |
 | Phase 4 | Feature engineering — behavioural + static features (`src/features/`) | ⏳ |
 | Phase 5 | Temporal model — LSTM + attention (`src/models/`) | ⏳ |
@@ -88,6 +121,39 @@
 - The base paper (Monje et al., 2025) does not publish its final column list — our 57-column target is a reconstruction from the three criteria they state; the audit CSV documents every decision
 - All numeric columns stored as `float64` (not int) to handle NaN values correctly throughout the pipeline
 - Parquet format used throughout for fast I/O — never re-read the raw CSV after `load_raw.py` runs
+
+### Why a P2P (Lending Club) dataset justifies a bank-oriented pre-delinquency engine
+
+We describe the end goal to the guide/reviewers as a pre-delinquency detection and
+intervention engine applicable to lenders generally (banks, NBFCs, fintechs), while
+validating it on a P2P dataset. This is deliberate, not a mismatch, for three reasons:
+
+1. **The underlying problem is lender-agnostic.** The base paper itself states that
+   P2P and bank lending share loan usage, credit evaluation, and periodic-repayment
+   mechanics — the differences are intermediation, application speed, and interest
+   rate, not the repayment/default dynamics we are modelling. A borrower missing
+   EMIs behaves the same way, mechanically, whether the originating lender is a
+   platform or a bank.
+2. **No public bank-loan dataset of comparable scale and label quality exists.**
+   Real bank portfolios are proprietary and regulator-restricted. Lending Club is
+   the largest public dataset with resolved, labelled outcomes (fully paid /
+   charged off / late) at the scale needed to train and validate a supervised
+   default model — which is why every comparable paper in the literature (Chen et
+   al. 2019, Zhou et al. 2019, Li et al. 2018, Ko et al. 2022, and others surveyed
+   in the base paper's Table 1) also uses P2P data, for the same reason.
+3. **The base paper's own conclusion names this as future work.** Monje et al.
+   (2025) state that their methodology "can be applied in future work to explain
+   default in other, non-P2P loans." Our project is, in effect, executing that
+   stated future work: the dataset is P2P, but the framework (behavioural feature
+   engineering, temporal modelling, explainability, intervention recommendation)
+   is built to generalise to EMI-based consumer lending broadly.
+
+**Framing to use in the synopsis/PPT/viva:** "We validate our framework on the
+Lending Club P2P dataset — the largest publicly available labelled dataset for
+installment credit default — as a proxy for the broader problem of pre-delinquency
+detection in EMI-based consumer lending. The resulting methodology is designed to
+generalise to bank and NBFC loan portfolios, which the base paper explicitly
+identifies as future work."
 
 ---
 
