@@ -1,4 +1,4 @@
-"""
+﻿"""
 build_features.py
 -----------------
 Phase 4: Feature engineering from synthetic behavioural sequences.
@@ -24,7 +24,7 @@ Per-borrower normalisation
   - Z-score uses each borrower's OWN mean/std across their sequence.
   - Income scale varies enormously across borrowers (e.g. $20k vs $200k/yr),
     so global normalisation would destroy relative within-borrower dynamics.
-  - Guarded divide: std=0 → normalised value = 0.0 (not NaN).
+  - Guarded divide: std=0 -> normalised value = 0.0 (not NaN).
 
 Usage:
     python src/features/build_features.py                   # full data
@@ -73,7 +73,7 @@ def zscore_per_borrower(
 ) -> pd.DataFrame:
     """
     Z-score `col` using each borrower's own mean/std across their sequence.
-    std=0 → 0.0 (guarded divide, no NaN).
+    std=0 -> 0.0 (guarded divide, no NaN).
     Result written to `out_col` in-place.
     """
     stats = df.groupby("loan_id")[col].agg(["mean", "std"]).rename(
@@ -121,8 +121,8 @@ def safe_mean(arr: np.ndarray) -> float:
 def cashflow_compression(spend: np.ndarray) -> float:
     """
     Ratio of mean spend in first half to mean spend in second half.
-    > 1  → spending was higher early (typical pre-distress pattern)
-    < 1  → spending compressed early (atypical)
+    > 1  -> spending was higher early (typical pre-distress pattern)
+    < 1  -> spending compressed early (atypical)
     Returns 1.0 if second-half mean is 0 (no compression measurable).
     """
     n = len(spend)
@@ -303,7 +303,7 @@ def validate_outputs(
     # --- Check 3: every borrower has exactly MAX_LEN rows in lstm_df ----------
     counts = lstm_df.groupby("loan_id")["month"].count()
     wrong  = (counts != MAX_LEN).sum()
-    print(f"  Borrowers with ≠{MAX_LEN} months in lstm: {wrong}  (must be 0)")
+    print(f"  Borrowers with !={MAX_LEN} months in lstm: {wrong}  (must be 0)")
     assert wrong == 0, f"{wrong} borrowers don't have exactly {MAX_LEN} padded rows"
     report["wrong_length_count"] = int(wrong)
 
@@ -333,7 +333,7 @@ def validate_outputs(
         })
     report["spot_checks"] = spot_results
 
-    print("  All validation checks passed ✓")
+    print("  All validation checks passed [OK]")
     return report
 
 
@@ -401,51 +401,108 @@ def main():
 
     # ── Load sequences ────────────────────────────────────────────────────────
     print(f"\nLoading sequences: {seq_path.relative_to(ROOT)}")
-    seq_df = pd.read_parquet(seq_path)
-    print(f"  shape: {seq_df.shape}")
 
-    if args.sample and not args.seq_parquet:
-        unique_ids = seq_df["loan_id"].unique()
-        if len(unique_ids) > args.sample:
-            keep = unique_ids[:args.sample]
-            seq_df = seq_df[seq_df["loan_id"].isin(keep)]
-            print(f"  Subsetting to {args.sample:,} borrowers")
+    # Get all unique loan_ids without loading full data
+    pf          = pq.ParquetFile(seq_path)
+    total_rows  = pf.metadata.num_rows
+    print(f"  Total rows in parquet: {total_rows:,}")
 
-    n_borrowers = seq_df["loan_id"].nunique()
+    # Read just loan_id column to get borrower list (memory efficient)
+    all_ids = pq.read_table(seq_path, columns=["loan_id"]).to_pandas()["loan_id"].unique()
+    n_borrowers = len(all_ids)
     print(f"  Borrowers: {n_borrowers:,}")
 
-    # ── Build per-month LSTM features ─────────────────────────────────────────
-    print("\nBuilding per-month LSTM features...")
-    lstm_df = build_lstm_features(seq_df)
-    print(f"  lstm_sequences shape: {lstm_df.shape}")
+    if args.sample and not args.seq_parquet:
+        all_ids = all_ids[:args.sample]
+        n_borrowers = len(all_ids)
+        print(f"  Subsetting to {n_borrowers:,} borrowers")
 
-    # ── Build sequence context features ───────────────────────────────────────
-    print("\nBuilding sequence-level context features...")
-    ctx_df = build_context_features(seq_df)
-    print(f"  context_features shape: {ctx_df.shape}")
+    # ── Chunked processing ────────────────────────────────────────────────────
+    CHUNK_SIZE   = args.chunk_size
+    id_chunks    = [all_ids[i:i+CHUNK_SIZE] for i in range(0, n_borrowers, CHUNK_SIZE)]
+    n_chunks     = len(id_chunks)
+    print(f"  Processing {n_chunks} chunks of up to {CHUNK_SIZE:,} borrowers")
 
-    # ── Validation ────────────────────────────────────────────────────────────
-    print("\nRunning validation checks...")
-    report = validate_outputs(lstm_df, ctx_df, seq_df)
-
-    # ── Save outputs ──────────────────────────────────────────────────────────
-    print("\nSaving outputs...")
     LSTM_OUT.parent.mkdir(parents=True, exist_ok=True)
-    lstm_df.to_parquet(LSTM_OUT, index=False)
+    lstm_writer  = None
+    ctx_records  = []
+    total_lstm   = 0
+
+    # ── True streaming: one parquet pass per borrower chunk ──────────────────
+    # For each id_chunk, stream through all row groups of the parquet, keeping
+    # only rows belonging to that chunk. Never hold the full file in RAM.
+    BATCH_SIZE = 500_000   # rows per pyarrow batch
+
+    print("\nBuilding features (streaming)...")
+
+    for ci, id_chunk in enumerate(id_chunks):
+        id_set       = set(id_chunk)
+        pieces       = []
+
+        for batch in pf.iter_batches(
+            batch_size=BATCH_SIZE,
+            columns=["loan_id", "month", "salary_credit",
+                     "salary_delay_days", "account_balance",
+                     "savings_balance", "discretionary_spend", "emi_status"],
+        ):
+            df_b = batch.to_pandas()
+            df_b = df_b[df_b["loan_id"].isin(id_set)]
+            if not df_b.empty:
+                pieces.append(df_b)
+
+        if not pieces:
+            continue
+        chunk_df = pd.concat(pieces, ignore_index=True)
+        del pieces
+
+        lstm_chunk = build_lstm_features(chunk_df)
+        ctx_chunk  = build_context_features(chunk_df)
+        ctx_records.append(ctx_chunk)
+        del chunk_df
+
+        table = pa.Table.from_pandas(lstm_chunk, preserve_index=False)
+        if lstm_writer is None:
+            lstm_writer = pq.ParquetWriter(LSTM_OUT, table.schema, compression="snappy")
+        lstm_writer.write_table(table)
+        total_lstm += len(lstm_chunk)
+        del lstm_chunk
+
+        print(f"  Chunk {ci+1:>4}/{n_chunks}: {len(id_chunk):>7,} borrowers | "
+              f"lstm rows so far: {total_lstm:>12,}")
+
+    if lstm_writer:
+        lstm_writer.close()
+
+    ctx_df = pd.concat(ctx_records, ignore_index=True)
+    del ctx_records
+
+    print(f"\n  lstm rows total      : {total_lstm:,}  (padded to {MAX_LEN} months)")
+    print(f"  context_features     : {ctx_df.shape}")
+
+    # ── Validation (run on first chunk only to avoid OOM) ────────────────────
+    print("\nRunning validation checks (on first chunk)...")
+    first_chunk_ids = set(id_chunks[0])
+    lstm_sample = pd.read_parquet(LSTM_OUT, filters=[("loan_id", "in", list(first_chunk_ids))])
+    ctx_sample  = ctx_df[ctx_df["loan_id"].isin(first_chunk_ids)]
+    seq_sample  = pd.read_parquet(seq_path, filters=[("loan_id", "in", list(first_chunk_ids))])
+    report = validate_outputs(lstm_sample, ctx_sample, seq_sample)
+
+    # ── Save context (lstm already saved incrementally) ───────────────────────
+    print("\nSaving context features...")
     ctx_df.to_parquet(CONTEXT_OUT, index=False)
 
     REPORT_OUT.parent.mkdir(parents=True, exist_ok=True)
     with open(REPORT_OUT, "w") as f:
         json.dump(report, f, indent=2)
 
-    print(f"  lstm_sequences   → {LSTM_OUT.relative_to(ROOT)}")
-    print(f"  context_features → {CONTEXT_OUT.relative_to(ROOT)}")
-    print(f"  report           → {REPORT_OUT.relative_to(ROOT)}")
+    print(f"  lstm_sequences   -> {LSTM_OUT.relative_to(ROOT)}")
+    print(f"  context_features -> {CONTEXT_OUT.relative_to(ROOT)}")
+    print(f"  report           -> {REPORT_OUT.relative_to(ROOT)}")
 
     print("\n" + "=" * 64)
     print("Phase 4 complete.")
-    print(f"  LSTM input shape  : {lstm_df.shape}  (loan_id × month rows, padded to {MAX_LEN})")
-    print(f"  Context shape     : {ctx_df.shape}   (one row per borrower)")
+    print(f"  LSTM rows total   : {total_lstm:,}  (padded to {MAX_LEN} months each)")
+    print(f"  Context shape     : {ctx_df.shape}  (one row per borrower)")
     print("=" * 64)
 
 
