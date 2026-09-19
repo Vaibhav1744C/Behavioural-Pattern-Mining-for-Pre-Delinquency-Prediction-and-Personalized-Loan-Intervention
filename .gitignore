@@ -48,7 +48,8 @@ Thumbs.db
 kaggle.json
 .kaggle/
 
-# ── Model artifacts (large files) ─────────────────────────────────────────────
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
 *.pkl
 *.joblib
 *.pt
