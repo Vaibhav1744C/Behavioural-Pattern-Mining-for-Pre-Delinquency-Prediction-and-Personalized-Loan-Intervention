@@ -33,17 +33,52 @@ reports/           write-ups, the synopsis, figures for the paper
 dashboard/          the analyst-facing UI
 ```
 
-## Setup
+## Getting Started (for teammates cloning this repo)
 
-1. Clone the repo, then create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate   # venv\Scripts\activate on Windows
-   pip install -r requirements.txt
-   ```
-2. Get the dataset (see `data/raw/README.md` for the exact steps).
-3. Run `notebooks/00_data_check.ipynb` to confirm your environment and data
-   are set up correctly before doing anything else.
+### 1. Clone & install dependencies
+```bash
+git clone https://github.com/Vaibhav1744C/Behavioural-Pattern-Mining-for-Pre-Delinquency-Prediction-and-Personalized-Loan-Intervention.git
+cd Behavioural-Pattern-Mining-for-Pre-Delinquency-Prediction-and-Personalized-Loan-Intervention
+
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+### 2. Get the dataset (NOT in the repo — download it yourself)
+
+The raw dataset is too large to commit. Download it manually:
+
+1. Go to: https://www.kaggle.com/datasets/ethon0426/lending-club-20072020q1
+2. Download and extract the zip — you need these two files:
+   - `Loan_status_2007-2020Q3.gzip`
+   - `LCDataDictionary.xlsx`
+3. Place both files in `data/raw/`
+
+See `data/raw/README.md` for full details.
+
+### 3. Convert raw data to parquet (do this once)
+```bash
+pip install pyarrow openpyxl   # if not already installed
+python src/data_generation/load_raw.py
+```
+This reads the raw CSV in chunks and saves `data/raw/lending_club_raw.parquet`.
+Takes a few minutes — the file is several GB.
+
+### 4. Run Phase 1 cleaning
+```bash
+python src/data_generation/clean_lending_club.py
+```
+Outputs:
+- `data/processed/lending_club_clean.parquet` — cleaned dataset ready for modelling
+- `reports/cleaning_audit.csv` — log of every dropped column with reason
+
+### 5. Check progress
+Read `SUMMARY.md` for a full up-to-date picture of what's done and what's next.
 
 ## Team
 
