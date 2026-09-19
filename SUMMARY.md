@@ -5,11 +5,11 @@
 
 ---
 
-## Current Status — Phase 2 (Baseline XGBoost Reproduction) — 🔄 In Progress
+## Current Status — Phase 2 (Baseline XGBoost Reproduction) — ✅ Complete
 
 ---
 
-### Phase 2 — Baseline XGBoost Reproduction 🔄 (in progress)
+### Phase 2 — Baseline XGBoost Reproduction ✅ Complete
 
 #### Script: `src/models/baseline_xgboost.py`
 
@@ -18,27 +18,34 @@ Faithfully reproduces the XGBoost baseline from the base paper. All 6 correction
 | # | Correction | Detail |
 |---|---|---|
 | 1 | **70/30 split** | Paper Section 4.4 states this explicitly — not 80/20 |
-| 2 | **Mixed encoding** | `grade`, `sub_grade`, `emp_length` → ordinal/label encoded (preserves ordering); `home_ownership`, `purpose`, `verification_status`, etc. → one-hot |
-| 3 | **No imbalance correction as default** | Paper Table 4: plain XGBoost (AUC 0.731) beats SMOTE (0.729), oversampling (0.662), undersampling (0.663). Vanilla is primary; `scale_pos_weight` runs as a labeled secondary comparison |
+| 2 | **Mixed encoding** | `grade`, `sub_grade`, `emp_length` → ordinal/label encoded; `home_ownership`, `purpose`, `verification_status`, etc. → one-hot. `int_rate`/`revol_util` stripped of `%` → float. `term` stripped of `months` → float. Date cols → months since Jan-2007 |
+| 3 | **No imbalance correction as default** | Paper Table 4: plain XGBoost (AUC 0.731) beats SMOTE (0.729), oversampling (0.662), undersampling (0.663). Vanilla is primary; `scale_pos_weight` runs as labeled secondary |
 | 4 | **Paper's exact hyperparameters** | `max_depth=6`, `min_child_weight=5`, `gamma=10`, `objective='binary:logistic'`, `n_estimators=300` |
-| 5 | **Date columns → numeric** | `issue_d` and `earliest_cr_line` converted to months-since-reference (Jan 2007), not one-hot encoded |
-| 6 | **Full pipeline serialized** | Fitted sklearn `Pipeline` (imputer + encoder + model) saved to `src/models/xgb_baseline_pipeline.pkl` — not raw XGBoost model alone — for leak-free Phase 6 SHAP/surrogate use |
+| 5 | **Date columns → numeric** | `issue_d`, `earliest_cr_line`, `sec_app_earliest_cr_line` converted to months-since-Jan-2007 |
+| 6 | **Full pipeline serialized** | Fitted sklearn `Pipeline` (imputer + encoder + model) saved — not raw XGBoost model alone — for leak-free Phase 6 SHAP/surrogate use |
 
-#### Outputs (once run)
+#### Verified output numbers
+
+| Metric | Our Result | Paper Reports |
+|---|---|---|
+| AUC-ROC (vanilla XGBoost) | **0.7345** | **0.731** ✅ |
+| AUC-ROC (scale_pos_weight) | 0.7352 | 0.729 (SMOTE) ✅ confirms paper finding |
+| F1 (vanilla, threshold=0.5) | 0.1875 | — |
+| Precision (vanilla) | 0.5861 | — |
+| Recall (vanilla) | 0.1116 | — |
+
+> **On AUC slightly exceeding paper (0.7345 vs 0.731):** expected — we train on 1.3M rows (2007–2020 Q1) vs the paper's ~564k (2007–2018 subset). More data = marginally better generalisation.
+
+> **scale_pos_weight observation:** Confirms the paper's finding — imbalance correction improves recall dramatically (0.1116 → 0.6761) but at the cost of precision (0.5861 → 0.3381). For a pre-delinquency system, this trade-off is worth documenting but vanilla remains the primary baseline per the paper.
+
+#### Artefacts saved
 
 | File | Description |
 |---|---|
 | `src/models/xgb_baseline_pipeline.pkl` | Full fitted pipeline for Phase 6 |
 | `data/processed/X_test.parquet` | Held-out test features for Phase 6 |
 | `data/processed/y_test.parquet` | Held-out test labels for Phase 6 |
-| `reports/baseline_results.json` | AUC, F1, precision, recall vs paper targets |
-
-#### To run
-```bash
-pip install xgboost scikit-learn
-python src/models/baseline_xgboost.py
-```
-Paper target: **AUC-ROC 0.731**
+| `reports/baseline_results.json` | Full metrics JSON |
 
 ---
 
@@ -106,7 +113,7 @@ Paper target: **AUC-ROC 0.731**
 | Phase | Description | Status |
 |---|---|---|
 | Phase 1 | Data ingestion (`load_raw.py`) + cleaning (`clean_lending_club.py`) | ✅ Complete |
-| Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | 🔄 In Progress |
+| Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | ✅ Complete — AUC 0.7345 (paper: 0.731) |
 | Phase 3 | Synthetic behavioural data generator (`src/data_generation/`) | ⏳ |
 | Phase 4 | Feature engineering — behavioural + static features (`src/features/`) | ⏳ |
 | Phase 5 | Temporal model — LSTM + attention (`src/models/`) | ⏳ |

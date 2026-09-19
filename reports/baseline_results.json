@@ -1,0 +1,41 @@
+{
+  "paper_target_auc": 0.731,
+  "paper_split": "70/30",
+  "our_split": "70/30",
+  "results": [
+    {
+      "label": "XGBoost \u2014 vanilla (paper primary)",
+      "auc_roc": 0.7345,
+      "f1": 0.1875,
+      "precision": 0.5861,
+      "recall": 0.1116,
+      "confusion_matrix": [
+        [
+          440960,
+          8972
+        ],
+        [
+          101133,
+          12706
+        ]
+      ]
+    },
+    {
+      "label": "XGBoost + scale_pos_weight",
+      "auc_roc": 0.7352,
+      "f1": 0.4508,
+      "precision": 0.3381,
+      "recall": 0.6761,
+      "confusion_matrix": [
+        [
+          299254,
+          150678
+        ],
+        [
+          36877,
+          76962
+        ]
+      ]
+    }
+  ]
+}
