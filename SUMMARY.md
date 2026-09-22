@@ -261,8 +261,8 @@ Loss: BCEWithLogitsLoss (no pos_weight for primary run — matches Phase 2 findi
 | Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | ✅ Complete — AUC 0.7345 (paper: 0.731) |
 | Phase 3A (full run) | Full 1.87M-borrower generation running as background job | ✅ Complete — 45,101,616 rows |
 | Phase 4 | Feature engineering — LSTM sequences + sequence-level context features | ✅ Complete — 45M rows x 9 cols |
-| Phase 5 | LSTM + attention temporal model | 🔄 In Progress (scripts ready, full training run pending) |
-| Phase 6 | Explainability — SHAP + fuzzy surrogate + unified engine | 🔄 In Progress |
+| Phase 5 | LSTM + attention temporal model | 🔄 In Progress — prepare_lstm_data.py running |
+| Phase 6 | Explainability — SHAP + fuzzy surrogate + unified engine | ⏳ Waiting on Phase 5 |
 | Phase 5 | Temporal model — LSTM + attention (`src/models/`) | ⏳ |
 | Phase 6 | Explainability — SHAP + fuzzy surrogate (`src/explainability/`) | ⏳ |
 | Phase 7 | Intervention layer + dashboard (`src/intervention/`, `dashboard/`) | ⏳ |
@@ -311,16 +311,23 @@ identifies as future work."
 
 ---
 
-### Phase 2.5 — XGBoost Static + Behavioural (Missing Comparison) 🔄 (scripts ready, run pending)
+### Phase 2.5 — XGBoost Static + Behavioural ✅ Complete
 
 #### Script: `src/models/xgboost_behavioural.py`
 
-The fast, cheap evidence that behavioural signal helps a tree model — needed BEFORE the expensive LSTM training finishes. Answers: "Do hand-engineered behavioural features lift XGBoost?" (separate question from whether raw sequences help an LSTM).
+The fast, cheap evidence that behavioural signal helps a tree model.
 
-- Same hyperparams and 70/30 split as Phase 2
-- Features: 71 static cols + 7 behavioural context cols = 78 cols total
-- Outputs: `src/models/xgb_behavioural_pipeline.pkl`, `reports/xgboost_behavioural_results.json`
-- Run: `python src/models/xgboost_behavioural.py`
+**Results:**
+
+| Model | AUC-ROC |
+|---|---|
+| Static-only XGBoost (Phase 2) | 0.7345 |
+| Static+Behavioural XGBoost (vanilla) | **0.7686** (+0.034 lift) |
+| Static+Behavioural + scale_pos_weight | 0.7690 |
+
+**Delta: +0.034 AUC** — behavioural features (salary_stability_idx, cashflow_compression, emi_stress_count, etc.) meaningfully improve a tree model. This is clean evidence that the hand-engineered behavioural signal carries real predictive information beyond the static snapshot.
+
+Outputs: `src/models/xgb_behavioural_pipeline.pkl`, `reports/xgboost_behavioural_results.json`
 
 ---
 
