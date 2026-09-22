@@ -5,7 +5,7 @@
 
 ---
 
-## Current Status — Phase 4 (Feature Engineering) — 🔄 In Progress  |  Phase 3A Full Run — 🔄 Running
+## Current Status — Phase 5 (LSTM Temporal Model) — 🔄 In Progress
 
 ---
 
@@ -198,12 +198,70 @@ Transforms long-format synthetic sequences into two artefacts the LSTM needs:
 
 ---
 
-| Phase | Description | Status |
+### Phase 5 — LSTM Temporal Model 🔄 (in progress)
+
+#### Scripts
+| Script | Purpose |
+|---|---|
+| `src/models/prepare_lstm_data.py` | One-time data prep: pivot long parquet → dense `.npy` array, extract train/test split |
+| `src/models/lstm_model.py` | Full LSTM training + evaluation |
+
+#### Architecture (per Claude spec)
+
+```
+Input: (batch, 24, 7)  ← per-month features
+  └─ nn.LSTM(input_size=7, hidden_size=64, num_layers=2, dropout=0.2, batch_first=True)
+       └─ Attention pooling over timesteps (masked — padded positions → -inf before softmax)
+            └─ pooled vector (batch, 64)
+
+Context: (batch, 6)  ← sequence_context_features (seq_len used for masking only, not fed in)
+  └─ Linear(6→16) → ReLU
+       └─ dense vector (batch, 16)
+
+Fusion: concat(64, 16) → Linear(80→64) → ReLU → Dropout(0.3) → Linear(64→1) → logit
+Loss: BCEWithLogitsLoss (no pos_weight for primary run — matches Phase 2 finding)
+```
+
+**Key design decisions:**
+- Unidirectional LSTM only — bidirectional would condition on future months (not causal)
+- `pack_padded_sequence` + `enforce_sorted=False` for variable-length masking
+- Attention mask set to `-inf` at padded positions before softmax — packing alone is not sufficient for attention
+- Attention weights saved for ~50 test borrowers → `reports/lstm_attention_samples.json` (Phase 6 input)
+- No gradient checkpointing / mixed precision — model is too small to need either
+
+**Training:**
+- Adam lr=1e-3, weight_decay=1e-5
+- ReduceLROnPlateau on val AUC, patience=3, factor=0.5
+- Early stopping on val AUC, patience=5
+- Batch size 1024, up to 30 epochs
+- Internal 90/10 validation split from train loan_ids (NOT the test set)
+
+**Data prep (one-time, `prepare_lstm_data.py`):**
+- Pivots `lstm_sequences.parquet` (long format) → dense `(1,879,234, 24, 7)` float32 array
+- Saved as `data/processed/lstm_sequences_dense.npy` (~1.26 GB, fits in RAM)
+- Extracts train loan_ids = all_ids - test_ids → `data/processed/train_loan_ids.parquet`
+- Dataset.__getitem__ indexes the in-memory array — no I/O per sample during training
+
+**Evaluation:**
+- AUC-ROC on exact same test loan_ids as Phase 2 (X_test.parquet) — directly comparable to 0.7345
+- Results → `reports/lstm_results.json` (same schema as `baseline_results.json`)
+- Ablation (alpha=0): separate run via `--sequences-file` flag → `reports/lstm_results_alpha0.json`
+
+**Target comparison table (after Phase 5):**
+
+| Model | AUC-ROC |
+|---|---|
+| Static XGBoost (Phase 2) | 0.7345 |
+| LSTM main run (alpha=0.6) | TBD |
+| LSTM ablation (alpha=0) | TBD |
+
+---
 |---|---|---|
 | Phase 1 | Data ingestion (`load_raw.py`) + cleaning (`clean_lending_club.py`) | ✅ Complete |
 | Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | ✅ Complete — AUC 0.7345 (paper: 0.731) |
-| Phase 3A (full run) | Full 1.87M-borrower generation running as background job | 🔄 Running |
-| Phase 4 | Feature engineering — LSTM sequences + sequence-level context features | 🔄 In Progress |
+| Phase 3A (full run) | Full 1.87M-borrower generation running as background job | ✅ Complete — 45,101,616 rows |
+| Phase 4 | Feature engineering — LSTM sequences + sequence-level context features | ✅ Complete — 45M rows x 9 cols |
+| Phase 5 | LSTM + attention temporal model | 🔄 In Progress |
 | Phase 5 | Temporal model — LSTM + attention (`src/models/`) | ⏳ |
 | Phase 6 | Explainability — SHAP + fuzzy surrogate (`src/explainability/`) | ⏳ |
 | Phase 7 | Intervention layer + dashboard (`src/intervention/`, `dashboard/`) | ⏳ |
