@@ -5,7 +5,7 @@
 
 ---
 
-## Current Status — Phase 5 (LSTM Temporal Model) — 🔄 In Progress
+## Current Status — Phase 6 (Explainability) — 🔄 In Progress
 
 ---
 
@@ -261,7 +261,8 @@ Loss: BCEWithLogitsLoss (no pos_weight for primary run — matches Phase 2 findi
 | Phase 2 | Baseline reproduction — XGBoost on the 71 cleaned features, replicate paper's AUC/F1 | ✅ Complete — AUC 0.7345 (paper: 0.731) |
 | Phase 3A (full run) | Full 1.87M-borrower generation running as background job | ✅ Complete — 45,101,616 rows |
 | Phase 4 | Feature engineering — LSTM sequences + sequence-level context features | ✅ Complete — 45M rows x 9 cols |
-| Phase 5 | LSTM + attention temporal model | 🔄 In Progress |
+| Phase 5 | LSTM + attention temporal model | 🔄 In Progress (scripts ready, full training run pending) |
+| Phase 6 | Explainability — SHAP + fuzzy surrogate + unified engine | 🔄 In Progress |
 | Phase 5 | Temporal model — LSTM + attention (`src/models/`) | ⏳ |
 | Phase 6 | Explainability — SHAP + fuzzy surrogate (`src/explainability/`) | ⏳ |
 | Phase 7 | Intervention layer + dashboard (`src/intervention/`, `dashboard/`) | ⏳ |
@@ -310,6 +311,85 @@ identifies as future work."
 
 ---
 
-## Base Paper Reference
+### Phase 2.5 — XGBoost Static + Behavioural (Missing Comparison) 🔄 (scripts ready, run pending)
+
+#### Script: `src/models/xgboost_behavioural.py`
+
+The fast, cheap evidence that behavioural signal helps a tree model — needed BEFORE the expensive LSTM training finishes. Answers: "Do hand-engineered behavioural features lift XGBoost?" (separate question from whether raw sequences help an LSTM).
+
+- Same hyperparams and 70/30 split as Phase 2
+- Features: 71 static cols + 7 behavioural context cols = 78 cols total
+- Outputs: `src/models/xgb_behavioural_pipeline.pkl`, `reports/xgboost_behavioural_results.json`
+- Run: `python src/models/xgboost_behavioural.py`
+
+---
+
+### Phase 6 — Explainability 🔄 (scripts ready, run pending Phase 5 + Phase 2.5 first)
+
+#### Three components, three scripts:
+
+**1. `src/explainability/shap_explainer.py` — SHAP on both XGBoost models**
+- `shap.TreeExplainer` (fast, exact for tree models) on static-only AND static+behavioural pipelines
+- Global: beeswarm plots → `reports/shap_summary_static.png`, `reports/shap_summary_behavioural.png`
+  - Visual evidence: "do behavioural features actually matter to the model?"
+- Local: top-3 SHAP values for same 50 test borrowers as LSTM attention samples
+  - Keyed by loan_id for joining in unified_explanation.py
+  - → `reports/shap_local_samples.json`
+
+**2. `src/explainability/fuzzy_surrogate.py` — 7-step surrogate tree (base paper Section 4)**
+- Input: X = static + 7 behavioural context features (NOT raw sequences — keeps rules human-readable)
+- Target p = black-box predicted probability (LSTM or XGBoost behavioural)
+- `DecisionTreeRegressor(max_depth=4)` → IF/THEN rules
+- R² fidelity reported and compared to paper's 0.806/0.808
+- Splits fuzzified using triangular MFs: VL/L/M/H/VH, centers [0.0, 0.25, 0.5, 0.75, 1.0]
+- Δ = signed displacement from nearest label center (paper's Eq. 1)
+- Runs for BOTH LSTM and XGBoost behavioural — two rule sets to compare
+- Outputs: `reports/surrogate_rules_lstm.json`, `reports/surrogate_rules_xgb_behavioural.json`, `reports/surrogate_fidelity.json`
+
+**3. `src/explainability/unified_explanation.py` — Behavioural Explanation Engine**
+- Joins all 3 sources for same 50 borrowers:
+  - Fuzzy risk category (from surrogate, mapped via predicted probability)
+  - Top-3 static SHAP drivers
+  - Top-3 behavioural SHAP drivers
+  - Top 2-3 attention months (from lstm_attention_samples.json)
+  - Templated narrative: "The model focused most on months X-Y, where the borrower showed [signal_1] and [signal_2]"
+- → `reports/unified_explanations_sample.json`
+
+**Output schema per borrower:**
+```json
+{
+  "loan_id": ...,
+  "predicted_risk_linguistic": "(High, +0.1250)",
+  "top_static_drivers": [...],
+  "top_behavioural_drivers": [...],
+  "attention_focus_months": [14, 15, 16],
+  "attention_narrative": "The model focused most on months 14-16, where the borrower showed salary delayed 8 days and EMI missed."
+}
+```
+
+**This file is:**
+- Best midsem/demo artifact — read 3-4 entries aloud
+- Direct input to Phase 7 intervention layer
+
+**Run order:**
+```bash
+# 1. Static+behavioural XGBoost (fast, ~15 min)
+python src/models/xgboost_behavioural.py
+
+# 2. LSTM full training (after prepare_lstm_data.py)
+python src/models/prepare_lstm_data.py
+python src/models/lstm_model.py
+
+# 3. SHAP (needs both XGBoost pipelines)
+python src/explainability/shap_explainer.py
+
+# 4. Fuzzy surrogate (needs LSTM checkpoint + XGBoost behavioural pipeline)
+python src/explainability/fuzzy_surrogate.py
+
+# 5. Unified explanation (needs all 3 above outputs)
+python src/explainability/unified_explanation.py
+```
+
+---
 
 Monje, Carrasco & Sanchez-Montanes (2025). *Machine Learning XAI for Early Loan Default Prediction*. Computational Economics, 67, 4033–4062.
