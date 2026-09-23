@@ -359,6 +359,19 @@ def main():
 
     seq_path = Path(args.seq_parquet) if args.seq_parquet else SEQ_PATH
 
+    # Derive output paths — if custom seq-parquet given, use a matching suffix
+    # e.g. behavioural_sequences_alpha0.parquet → lstm_sequences_alpha0.parquet
+    if args.seq_parquet:
+        suffix = seq_path.stem.replace("behavioural_sequences", "").strip("_") or ""
+        suffix = f"_{suffix}" if suffix else ""
+        lstm_out    = ROOT / "data" / "processed" / f"lstm_sequences{suffix}.parquet"
+        context_out = ROOT / "data" / "processed" / f"sequence_context_features{suffix}.parquet"
+        report_out  = ROOT / "reports" / f"feature_engineering_report{suffix}.json"
+    else:
+        lstm_out    = LSTM_OUT
+        context_out = CONTEXT_OUT
+        report_out  = REPORT_OUT
+
     # ── Generate sample sequences if full parquet doesn't exist yet -----------
     if not seq_path.exists():
         print(f"\n  {seq_path.name} not found.")
@@ -462,7 +475,9 @@ def main():
 
         table = pa.Table.from_pandas(lstm_chunk, preserve_index=False)
         if lstm_writer is None:
-            lstm_writer = pq.ParquetWriter(LSTM_OUT, table.schema, compression="snappy")
+            if lstm_out.exists():
+                lstm_out.unlink()
+            lstm_writer = pq.ParquetWriter(lstm_out, table.schema, compression="snappy")
         lstm_writer.write_table(table)
         total_lstm += len(lstm_chunk)
         del lstm_chunk
@@ -482,22 +497,22 @@ def main():
     # ── Validation (run on first chunk only to avoid OOM) ────────────────────
     print("\nRunning validation checks (on first chunk)...")
     first_chunk_ids = set(id_chunks[0])
-    lstm_sample = pd.read_parquet(LSTM_OUT, filters=[("loan_id", "in", list(first_chunk_ids))])
+    lstm_sample = pd.read_parquet(lstm_out, filters=[("loan_id", "in", list(first_chunk_ids))])
     ctx_sample  = ctx_df[ctx_df["loan_id"].isin(first_chunk_ids)]
     seq_sample  = pd.read_parquet(seq_path, filters=[("loan_id", "in", list(first_chunk_ids))])
     report = validate_outputs(lstm_sample, ctx_sample, seq_sample)
 
     # ── Save context (lstm already saved incrementally) ───────────────────────
     print("\nSaving context features...")
-    ctx_df.to_parquet(CONTEXT_OUT, index=False)
+    ctx_df.to_parquet(context_out, index=False)
 
-    REPORT_OUT.parent.mkdir(parents=True, exist_ok=True)
-    with open(REPORT_OUT, "w") as f:
+    report_out.parent.mkdir(parents=True, exist_ok=True)
+    with open(report_out, "w") as f:
         json.dump(report, f, indent=2)
 
-    print(f"  lstm_sequences   -> {LSTM_OUT.relative_to(ROOT)}")
-    print(f"  context_features -> {CONTEXT_OUT.relative_to(ROOT)}")
-    print(f"  report           -> {REPORT_OUT.relative_to(ROOT)}")
+    print(f"  lstm_sequences   -> {lstm_out.relative_to(ROOT)}")
+    print(f"  context_features -> {context_out.relative_to(ROOT)}")
+    print(f"  report           -> {report_out.relative_to(ROOT)}")
 
     print("\n" + "=" * 64)
     print("Phase 4 complete.")
