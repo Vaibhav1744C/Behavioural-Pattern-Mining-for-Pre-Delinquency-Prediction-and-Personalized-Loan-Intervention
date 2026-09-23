@@ -397,6 +397,8 @@ def parse_args():
                    help="Train on N borrowers only (quick smoke test)")
     p.add_argument("--pos-weight",     action="store_true",
                    help="Use pos_weight in BCEWithLogitsLoss (secondary comparison)")
+    p.add_argument("--eval-only",      action="store_true",
+                   help="Skip training, load checkpoint and run test evaluation only")
     return p.parse_args()
 
 
@@ -468,37 +470,44 @@ def main():
         optimizer, mode="max", patience=3, factor=0.5
     )
 
-    # ── Training loop ─────────────────────────────────────────────────────────
-    best_val_auc  = 0.0
-    patience_left = 5
-    history       = []
+    # ── Training loop (skip if --eval-only) ──────────────────────────────────
+    if args.eval_only:
+        print("\n--eval-only flag set. Loading checkpoint directly...")
+        if not CHECKPOINT_OUT.exists():
+            raise FileNotFoundError(f"No checkpoint at {CHECKPOINT_OUT}. Run training first.")
+        best_val_auc = 0.0
+        history      = []
+    else:
+        best_val_auc  = 0.0
+        patience_left = 5
+        history       = []
 
-    print(f"\nTraining for up to {args.epochs} epochs (early stop patience=5 on val AUC)...\n")
+        print(f"\nTraining for up to {args.epochs} epochs (early stop patience=5 on val AUC)...\n")
 
-    for epoch in range(1, args.epochs + 1):
-        t0        = time.time()
-        train_loss= train_epoch(model, train_loader, optimizer, criterion, device)
-        val_loss, val_auc, _, _ = evaluate(model, val_loader, criterion, device)
-        scheduler.step(val_auc)
-        elapsed   = time.time() - t0
+        for epoch in range(1, args.epochs + 1):
+            t0        = time.time()
+            train_loss= train_epoch(model, train_loader, optimizer, criterion, device)
+            val_loss, val_auc, _, _ = evaluate(model, val_loader, criterion, device)
+            scheduler.step(val_auc)
+            elapsed   = time.time() - t0
 
-        print(f"  Epoch {epoch:>3}/{args.epochs}  "
-              f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
-              f"val_auc={val_auc:.4f}  ({elapsed:.1f}s)")
+            print(f"  Epoch {epoch:>3}/{args.epochs}  "
+                  f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
+                  f"val_auc={val_auc:.4f}  ({elapsed:.1f}s)")
 
-        history.append({"epoch": epoch, "train_loss": round(train_loss, 5),
-                        "val_loss": round(val_loss, 5), "val_auc": round(val_auc, 4)})
+            history.append({"epoch": epoch, "train_loss": round(train_loss, 5),
+                            "val_loss": round(val_loss, 5), "val_auc": round(val_auc, 4)})
 
-        if val_auc > best_val_auc:
-            best_val_auc  = val_auc
-            patience_left = 5
-            torch.save(model.state_dict(), CHECKPOINT_OUT)
-            print(f"    --> New best val AUC: {best_val_auc:.4f}  (checkpoint saved)")
-        else:
-            patience_left -= 1
-            if patience_left == 0:
-                print(f"\n  Early stopping at epoch {epoch} (patience exhausted)")
-                break
+            if val_auc > best_val_auc:
+                best_val_auc  = val_auc
+                patience_left = 5
+                torch.save(model.state_dict(), CHECKPOINT_OUT)
+                print(f"    --> New best val AUC: {best_val_auc:.4f}  (checkpoint saved)")
+            else:
+                patience_left -= 1
+                if patience_left == 0:
+                    print(f"\n  Early stopping at epoch {epoch} (patience exhausted)")
+                    break
 
     # ── Test evaluation ───────────────────────────────────────────────────────
     print(f"\nLoading best checkpoint (val AUC={best_val_auc:.4f})...")
