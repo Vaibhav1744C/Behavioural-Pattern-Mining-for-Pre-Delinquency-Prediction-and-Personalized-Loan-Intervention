@@ -629,3 +629,309 @@ Also valid — means the temporal signal in our synthetic data is not cleanly se
 ---
 
 *Document prepared for midsem project review. All code is version-controlled at the GitHub repo above.*
+Part 2 — The 7 engineered features (Phase 4)
+
+build_features.py took those 24-month sequences and compressed each borrower's whole trajectory into 7 single numbers — turning "24 months of data" into "one row per borrower," which is what a tree model like XGBoost needs (it can't consume a raw sequence directly):
+
+#	Feature	Formula	What it captures
+1	salary_stability_idx	std(salary_credit) / mean(salary_credit)	How consistent the borrower's income is month to month
+2	salary_delay_trend	Linear regression slope of salary_delay_days over time	Is the salary arriving progressively later? (a trend, not just an average)
+3	savings_slope	Linear regression slope of savings_balance over time	Is savings growing, flat, or draining?
+4	savings_volatility	std(savings_balance)	How erratic the savings balance is
+5	cashflow_compression	mean(spend, first half of sequence) / mean(spend, second half)	Values >1 mean spending dropped later on — a compression pattern typical of financial stress
+6	emi_stress_count	count of months where emi_status = delayed or missed	Direct count of repayment trouble
+7	seq_len	Actual number of months observed for that borrower (2–24, from loan term)	Used mainly for LSTM masking; included as a feature in the XGBoost run too
+
+
+---
+
+## 13. The Multi-Agent AI Architecture (Future Scope)
+
+This section answers: **"How will you build the AI agents and how will they communicate?"**
+
+---
+
+### Why "Agents" and not just "models"
+
+A single model predicts a number. An agent **acts** — it perceives input, reasons about it, uses tools, and produces an output that triggers the next step in a pipeline. Our system has four agents that hand off to each other, forming a complete autonomous loop.
+
+---
+
+### The 4-Agent System
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ORCHESTRATOR (FastAPI / LangGraph)                │
+│         Routes messages, manages state, triggers agents              │
+└────────┬───────────────┬────────────────┬────────────────┬──────────┘
+         │               │                │                │
+         ▼               ▼                ▼                ▼
+   ┌──────────┐   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+   │ Agent 1  │   │   Agent 2    │  │   Agent 3    │  │   Agent 4    │
+   │  RISK    │   │ EXPLANATION  │  │INTERVENTION  │  │  MONITORING  │
+   │DETECTION │   │              │  │              │  │              │
+   └──────────┘   └──────────────┘  └──────────────┘  └──────────────┘
+```
+
+---
+
+### Agent 1 — Risk Detection Agent
+
+**What it does:** Takes a borrower's static features + behavioural sequence and outputs a risk probability.
+
+**Tools it uses:**
+- `XGBoostPredictor` — static + 7 behavioural features → probability
+- `LSTMPredictor` — 24-month sequence → probability + attention weights
+- `EnsembleFusion` — combines both scores into a final risk tier
+
+**Input message (JSON):**
+```json
+{
+  "loan_id": 1077501,
+  "static_features": { "dti": 22.5, "grade": "C", "revol_util": 0.78, ... },
+  "sequence": [
+    { "month": 0, "salary_delay_days": 0, "emi_status": "on_time", ... },
+    { "month": 1, "salary_delay_days": 2, "emi_status": "on_time", ... },
+    ...
+    { "month": 15, "salary_delay_days": 8, "emi_status": "missed", ... }
+  ]
+}
+```
+
+**Output message (JSON):**
+```json
+{
+  "loan_id": 1077501,
+  "risk_probability": 0.82,
+  "risk_tier": "High",
+  "xgb_score": 0.79,
+  "lstm_score": 0.68,
+  "attention_weights": [0.02, 0.03, ..., 0.18, 0.21, 0.19, ...],
+  "status": "completed"
+}
+```
+
+**How it's built:**
+- Python class wrapping the fitted sklearn Pipeline + PyTorch model
+- Loaded once at startup, held in memory — inference is sub-second
+- Exposes a `predict(loan_id)` method the orchestrator calls
+
+**Current status:** ✅ XGBoost + LSTM both trained and serialized. Integration into agent wrapper = Phase 7.
+
+---
+
+### Agent 2 — Explanation Agent
+
+**What it does:** Takes Agent 1's output and answers "WHY is this borrower high risk?" using three tools.
+
+**Tools it uses (called in sequence, like a real LLM agent):**
+1. `SHAPTool` — calls `shap.TreeExplainer` on the XGBoost model, returns top-N feature importances
+2. `FuzzySurrogateTool` — matches the borrower's feature values against the surrogate tree rules, returns the matched linguistic rule
+3. `AttentionNarrativeTool` — reads attention weights from Agent 1, identifies peak months, pulls raw sequence values for those months, generates templated narrative
+
+**Input message:**
+```json
+{
+  "loan_id": 1077501,
+  "risk_probability": 0.82,
+  "attention_weights": [...],
+  "static_features": { ... },
+  "sequence": [ ... ]
+}
+```
+
+**Output message:**
+```json
+{
+  "loan_id": 1077501,
+  "predicted_risk_linguistic": "(High, +0.1250)",
+  "top_static_drivers": [
+    { "feature": "dti", "shap_value": 0.18, "direction": "increases risk" },
+    { "feature": "revol_util", "shap_value": 0.14, "direction": "increases risk" }
+  ],
+  "top_behavioural_drivers": [
+    { "feature": "emi_stress_count", "shap_value": 0.21, "direction": "increases risk" },
+    { "feature": "cashflow_compression", "shap_value": 0.16, "direction": "increases risk" }
+  ],
+  "matched_fuzzy_rule": "IF emi_stress_count > 3 (High, +0.08) AND cashflow_compression > 1.2 (Medium, +0.12) THEN risk = (High, +0.09)",
+  "attention_focus_months": [14, 15, 16],
+  "attention_narrative": "The model focused most on months 14-16, where the borrower showed salary delayed 8 days above baseline and EMI missed."
+}
+```
+
+**How it's built:**
+- Each tool is a Python function registered with the agent
+- Tools are called sequentially (SHAP → Fuzzy → Attention) — output of each feeds into the next
+- In a full LangGraph implementation, this becomes a graph of nodes with edges between them
+
+**Current status:** ✅ All three tools written as Python scripts. Agent wrapper = Phase 7.
+
+---
+
+### Agent 3 — Intervention Agent
+
+**What it does:** Takes Agent 2's explanation and outputs a personalized recommended bank action.
+
+**Tools it uses:**
+- `RuleMatcher` — maps fuzzy risk tier + top drivers → intervention template
+- `ActionPrioritiser` — ranks multiple possible actions by urgency
+- `RecommendationFormatter` — formats output for the dashboard
+
+**Decision logic (rule engine, NOT LLM — required for regulatory auditability):**
+
+```
+IF risk_tier = "Very High" OR "High":
+    AND top_driver contains "emi_stress_count":
+        → ACTION_1: "Contact borrower within 48 hours for financial assessment"
+        → ACTION_2: "Offer EMI restructuring — reduce monthly payment by 20% for 3 months"
+        → ACTION_3: "Escalate to Relationship Manager"
+        → MONITOR: "Daily account review for 30 days"
+
+    AND top_driver contains "cashflow_compression":
+        → ACTION_1: "Offer financial counselling referral"
+        → ACTION_2: "Review credit limit — consider temporary reduction"
+        → MONITOR: "Weekly review for 60 days"
+
+IF risk_tier = "Medium":
+    → ACTION_1: "Send proactive outreach SMS/email about repayment options"
+    → MONITOR: "Bi-weekly review for 30 days"
+
+IF risk_tier = "Low" OR "Very Low":
+    → No action required
+    → MONITOR: "Standard monthly review"
+```
+
+**Why rule-based and not LLM?**
+A bank's compliance team must be able to audit every recommendation. "The LLM decided" is not an acceptable answer to a regulator. A rule engine produces the same output for the same input, every time, traceable to a specific rule.
+
+**LLMs ARE used** — but only in the dashboard's user interface layer, to translate the JSON recommendation into plain English for the banker. The decision itself is deterministic.
+
+**Output message:**
+```json
+{
+  "loan_id": 1077501,
+  "risk_tier": "High",
+  "primary_driver": "emi_stress_count",
+  "recommended_actions": [
+    { "priority": 1, "action": "Contact borrower within 48 hours", "channel": "phone" },
+    { "priority": 2, "action": "Offer EMI restructuring (20% reduction, 3 months)", "channel": "branch" },
+    { "priority": 3, "action": "Escalate to Relationship Manager", "channel": "internal" }
+  ],
+  "monitoring_frequency": "daily_30_days"
+}
+```
+
+**Current status:** ⏳ Planned for Phase 7. Rule engine design is complete.
+
+---
+
+### Agent 4 — Monitoring Agent (Future Scope)
+
+**What it does:** Watches each borrower every month, re-runs the pipeline automatically when new transaction data arrives, and closes the feedback loop.
+
+**How it communicates with the other agents:**
+
+```
+Bank CBS (Core Banking System)
+    │
+    │  Monthly transaction event (Kafka message)
+    ▼
+Agent 4 — Monitoring Agent
+    │  Updates borrower's 24-month sliding window
+    │  Re-runs Agent 1
+    │
+    ├── Risk tier UNCHANGED → log and continue
+    │
+    └── Risk tier CHANGED (e.g. Low → High)
+            │
+            ▼
+        Agent 2 — Explanation Agent (auto-triggered)
+            │
+            ▼
+        Agent 3 — Intervention Agent (auto-triggered)
+            │
+            ▼
+        Dashboard alert + banker notification
+            │
+            ▼
+        Banker acts → outcome recorded
+            │
+            ▼
+        Agent 4 — Feedback loop
+            │  Did the intervention work? (default prevented = 1, default occurred = 0)
+            │  Store as training data for future rule refinement
+            └──────────────────────────────────────────────────►
+```
+
+**Technology stack for the full production system:**
+
+| Component | Technology | Purpose |
+|---|---|---|
+| Agent orchestration | LangGraph / AutoGen | Routes messages between agents, manages state |
+| Real-time data feed | Apache Kafka | Streams monthly transaction events from bank CBS |
+| Agent communication | JSON over REST (FastAPI) | Agents communicate via HTTP — decoupled and scalable |
+| Borrower state store | Redis | Holds current 24-month window per borrower in memory |
+| Model serving | TorchServe + MLflow | Serves XGBoost + LSTM with versioning |
+| Intervention tracking | PostgreSQL | Stores all recommendations + outcomes |
+| Dashboard | Streamlit | Banker-facing UI |
+| LLM layer | GPT-4o / Gemini (API) | Translates JSON explanations into plain English for dashboard only |
+
+---
+
+### How agents communicate — the message bus pattern
+
+Every agent is a **microservice** that:
+1. Reads from an input queue (receives a JSON message)
+2. Does its work (runs a model / applies rules / calls tools)
+3. Writes to an output queue (publishes a JSON message)
+
+The orchestrator (LangGraph) manages which agent fires next and passes the context forward. This is the same architecture used in production AI systems like Salesforce Einstein, AWS Bedrock Agents, and Google Vertex AI Agents.
+
+```
+Input Event
+    ↓
+[Queue] → Agent 1 → [Queue] → Agent 2 → [Queue] → Agent 3 → [Queue] → Dashboard
+                                                         ↑
+                                                    Agent 4 (monthly loop)
+```
+
+Each queue is just a JSON object. In development: Python function calls. In production: Kafka topics or AWS SQS messages.
+
+---
+
+### What's built vs what's planned
+
+| Agent | Status | What exists |
+|---|---|---|
+| Agent 1 — Risk Detection | ✅ Core built | XGBoost + LSTM trained, serialized, ready to serve |
+| Agent 2 — Explanation | ✅ Tools written | SHAP, fuzzy surrogate, attention scripts complete |
+| Agent 3 — Intervention | ⏳ Phase 7 | Rule engine design complete, implementation next |
+| Agent 4 — Monitoring | 🔮 Future scope | Requires real bank transaction feed |
+| Orchestrator | ⏳ Phase 7 | FastAPI wrapper around all agents |
+| Dashboard | ⏳ Phase 7 | Streamlit UI |
+
+---
+
+### One-line answer for the review
+
+> "Each agent is a Python microservice that receives a JSON message, calls its tools (a model, a rule engine, or an API), and publishes a JSON message to the next agent. The orchestrator is a FastAPI server that routes messages between agents. In production, the message bus would be Apache Kafka fed by a real bank's core banking system."
+
+---
+
+## 14. Full Metric Results (Confirmed)
+
+| Model | ROC-AUC | PR-AUC | Recall (best-F1 threshold) | Defaulters caught |
+|---|---|---|---|---|
+| Static XGBoost | 0.7345 | 0.415 | 63.3% | 72,100 / 113,839 |
+| **Static+Behavioural XGBoost** | **0.7698** | **0.485** | **61.3%** | **69,751 / 113,839** |
+| LSTM | 0.6379 | 0.330 | 39.1% | 44,526 / 113,839 |
+
+**Key insight:** Behavioural XGBoost is best on both ROC-AUC and PR-AUC. At the optimal threshold, it generates fewer false alarms (100,695) than the static model (133,250) while catching a similar number of defaulters — meaning bank staff get more actionable alerts with less noise.
+
+LSTM at threshold=0.5 predicts all-negative (conservative). At its optimal threshold=0.187, it catches 44,526 defaulters with the lowest false alarm rate (76,891) — a different operating characteristic suited to high-precision, low-volume intervention policies.
+
+**Full results saved at:** `reports/full_metrics_comparison.json`
+
+---
+
+*Document prepared for midsem project review. All code is version-controlled at the GitHub repo above.*
