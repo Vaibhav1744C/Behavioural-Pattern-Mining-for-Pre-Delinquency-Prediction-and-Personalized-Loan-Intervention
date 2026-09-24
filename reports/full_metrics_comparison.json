@@ -1,0 +1,140 @@
+[
+  {
+    "label": "Static XGBoost (t=0.5)",
+    "threshold": 0.5,
+    "roc_auc": 0.7345,
+    "pr_auc": 0.415,
+    "precision": 0.5861,
+    "recall": 0.1116,
+    "f1": 0.1875,
+    "tp": 12706,
+    "fp": 8972,
+    "tn": 440960,
+    "fn": 101133,
+    "confusion_matrix": [
+      [
+        440960,
+        8972
+      ],
+      [
+        101133,
+        12706
+      ]
+    ]
+  },
+  {
+    "label": "Static XGBoost (t=0.221 best-F1)",
+    "threshold": 0.221,
+    "roc_auc": 0.7345,
+    "pr_auc": 0.415,
+    "precision": 0.3511,
+    "recall": 0.6334,
+    "f1": 0.4518,
+    "tp": 72100,
+    "fp": 133250,
+    "tn": 316682,
+    "fn": 41739,
+    "confusion_matrix": [
+      [
+        316682,
+        133250
+      ],
+      [
+        41739,
+        72100
+      ]
+    ]
+  },
+  {
+    "label": "Behav XGBoost (t=0.5)",
+    "threshold": 0.5,
+    "roc_auc": 0.7698,
+    "pr_auc": 0.4847,
+    "precision": 0.6181,
+    "recall": 0.2332,
+    "f1": 0.3387,
+    "tp": 26551,
+    "fp": 16406,
+    "tn": 433526,
+    "fn": 87288,
+    "confusion_matrix": [
+      [
+        433526,
+        16406
+      ],
+      [
+        87288,
+        26551
+      ]
+    ]
+  },
+  {
+    "label": "Behav XGBoost (t=0.243 best-F1)",
+    "threshold": 0.243,
+    "roc_auc": 0.7698,
+    "pr_auc": 0.4847,
+    "precision": 0.4092,
+    "recall": 0.6127,
+    "f1": 0.4907,
+    "tp": 69751,
+    "fp": 100695,
+    "tn": 349237,
+    "fn": 44088,
+    "confusion_matrix": [
+      [
+        349237,
+        100695
+      ],
+      [
+        44088,
+        69751
+      ]
+    ]
+  },
+  {
+    "label": "LSTM (t=0.5)",
+    "threshold": 0.5,
+    "roc_auc": 0.6379,
+    "pr_auc": 0.3301,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "tp": 0,
+    "fp": 1,
+    "tn": 449931,
+    "fn": 113839,
+    "confusion_matrix": [
+      [
+        449931,
+        1
+      ],
+      [
+        113839,
+        0
+      ]
+    ]
+  },
+  {
+    "label": "LSTM (t=0.187 best-F1)",
+    "threshold": 0.187,
+    "roc_auc": 0.6379,
+    "pr_auc": 0.3301,
+    "precision": 0.3667,
+    "recall": 0.3911,
+    "f1": 0.3785,
+    "tp": 44526,
+    "fp": 76891,
+    "tn": 373041,
+    "fn": 69313,
+    "confusion_matrix": [
+      [
+        373041,
+        76891
+      ],
+      [
+        69313,
+        44526
+      ]
+    ]
+  }
+]
