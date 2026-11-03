@@ -243,8 +243,25 @@ pip install -r requirements.txt
 streamlit run dashboard/app.py
 ```
 
-See [DATA.md](DATA.md) for the large artifacts needed to regenerate the full
-research run and the scripts that create them.
+See [DATA.md](DATA.md) for the full-run artifacts and where to place them. The
+committed subsample profile runs directly from its compact fixtures. To use the
+full profile on a second machine, first place the artifacts listed in `DATA.md`
+under `data/` (or set `BPM_DATA_ROOT` to the directory containing `processed/`
+and `synthetic/`), then run these commands from the repository root:
+
+```powershell
+# Windows PowerShell
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python src/utils/verify_full_run.py
+python dashboard/build_dashboard_data.py --run full
+streamlit run dashboard/app.py
+```
+
+For macOS/Linux, activate with `source venv/bin/activate`; the remaining
+commands are the same. The full profile writes fixtures only to
+`dashboard/data_full/`.
 
 ---
 

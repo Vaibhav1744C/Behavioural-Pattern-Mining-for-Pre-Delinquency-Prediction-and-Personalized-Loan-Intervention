@@ -1,4 +1,4 @@
-# ── Data artifacts (keep large datasets and model arrays out of git) ──────────
+# Data and model artifacts
 data/
 !data/
 data/*
@@ -11,12 +11,23 @@ data/raw/*
 *.pt
 *.parquet
 
-# The compact, committed dashboard fixtures are the only parquet exception.
+# Compact dashboard fixtures only
 !dashboard/data/
 !dashboard/data/*.parquet
 !dashboard/data/*.json
+!dashboard/data_full/
+!dashboard/data_full/*.parquet
+!dashboard/data_full/*.json
 
-# ── Python ────────────────────────────────────────────────────────────────────
+# Large full-run outputs
+reports/full_run/*.parquet
+reports/full_run/*.npy
+reports/full_run/*.pkl
+reports/full_run/*.pt
+reports/full_run/*.zip
+reports/full_run/*.gzip
+
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -27,31 +38,31 @@ dist/
 build/
 *.egg
 
-# ── Virtual environments ───────────────────────────────────────────────────────
+# Virtual environments
 venv/
 .venv/
 env/
 .env
 
-# ── Jupyter ───────────────────────────────────────────────────────────────────
+# Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# ── IDE ───────────────────────────────────────────────────────────────────────
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# ── OS ────────────────────────────────────────────────────────────────────────
+# OS
 .DS_Store
 Thumbs.db
 
-# ── Kaggle credentials (NEVER commit) ─────────────────────────────────────────
+# Kaggle credentials
 kaggle.json
 .kaggle/
 
-# ── Logs ──────────────────────────────────────────────────────────────────────
+# Logs and model exports
 logs/
 *.joblib
 *.pth

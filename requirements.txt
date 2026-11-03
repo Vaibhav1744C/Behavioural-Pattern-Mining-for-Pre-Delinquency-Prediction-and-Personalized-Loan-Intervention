@@ -1,29 +1,22 @@
-# Core
+# Core data and ML
 pandas==2.3.3
 numpy==2.2.6
 scikit-learn==1.7.2
 pyarrow==25.0.1
-
-# Baseline model (matches base paper)
 xgboost==3.2.0
 
-# Temporal deep learning
-torch>=2.1
-pytorch-lightning>=2.1
+# Temporal model and explainability
+torch==2.14.0
+pytorch-lightning==2.6.6
+shap==0.49.1
+scikit-fuzzy==0.5.0
 
-# Explainability
-shap>=0.44
-
-# Fuzzy linguistic modelling (2-tuple model — check for an existing package
-# first; if none fits, this gets implemented directly in src/explainability/)
-scikit-fuzzy>=0.4
-
-# Utilities
-matplotlib>=3.7
-seaborn>=0.12
-jupyter>=1.0
-kaggle>=1.6
-tqdm>=4.66
+# Project utilities
+matplotlib==3.10.9
+seaborn==0.13.2
+jupyter==1.1.1
+kaggle==1.7.4.5
+tqdm==4.70.1
 
 # Dashboard
 streamlit==1.65.0

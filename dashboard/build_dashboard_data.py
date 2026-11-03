@@ -6,6 +6,7 @@ artifacts. Sequence rows are scanned through a PyArrow loan_id filter.
 
 from __future__ import annotations
 
+import argparse
 import json
 import pickle
 import sys
@@ -18,11 +19,13 @@ import pyarrow.parquet as pq
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from src.config import DATA_ROOT
 OUT = ROOT / "dashboard" / "data"
-IDS_PATH = ROOT / "data" / "processed" / "subsample_loan_ids.parquet"
-CLEAN_PATH = ROOT / "data" / "processed" / "lending_club_clean.parquet"
-CONTEXT_PATH = ROOT / "data" / "processed" / "sequence_context_features_subsample.parquet"
-SEQUENCE_PATH = ROOT / "data" / "synthetic" / "behavioural_sequences_subsample.parquet"
+IDS_PATH = DATA_ROOT / "processed" / "subsample_loan_ids.parquet"
+CLEAN_PATH = DATA_ROOT / "processed" / "lending_club_clean.parquet"
+CONTEXT_PATH = DATA_ROOT / "processed" / "sequence_context_features_subsample.parquet"
+SEQUENCE_PATH = DATA_ROOT / "synthetic" / "behavioural_sequences_subsample.parquet"
 STATIC_MODEL_PATH = ROOT / "src" / "models" / "xgb_baseline_subsample_pipeline.pkl"
 BEHAV_MODEL_PATH = ROOT / "src" / "models" / "xgb_behavioural_pipeline_subsample.pkl"
 SHAP_LOCAL_PATH = ROOT / "reports" / "shap_local_samples_subsample.json"
@@ -83,6 +86,13 @@ def _serialize_driver_list(drivers: list[dict]) -> list[dict]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Build dashboard data for a named run profile")
+    parser.add_argument("--run", choices=("subsample", "full"), default="subsample")
+    args = parser.parse_args()
+    if args.run == "full":
+        from build_full_dashboard_data import build
+        build()
+        return
     _require_inputs()
     OUT.mkdir(parents=True, exist_ok=True)
 

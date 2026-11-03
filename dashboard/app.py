@@ -13,13 +13,14 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "dashboard" / "data"
+ACTIVE_PROFILE = "subsample"
+SCOPE = "200k-borrower subsample, 60k test"
 sys.path.insert(0, str(ROOT))
 from src.agents.common import clean_display_drivers, is_date_derived
 from dashboard.theme import (AMBER_BG, BORDER, GREY, GRID, INK, MUTED, NAVY, PAGE,
                              PLOTLY_TEMPLATE, RISK_COLORS, RISK_ORDER, TEAL, WHITE,
                              CUSTOM_CSS)
 
-SCOPE = "200k-borrower subsample, 60k test"
 REQUIRED_DATA_FILES = [
     "test_predictions.parquet",
     "sample_borrowers.parquet",
@@ -35,27 +36,28 @@ st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False)
-def load_parquet(name: str, version: int) -> pd.DataFrame:
-    return pd.read_parquet(DATA / name)
+def load_parquet(data_dir: str, name: str, version: int) -> pd.DataFrame:
+    return pd.read_parquet(Path(data_dir) / name)
 
 
 @st.cache_data(show_spinner=False)
-def load_json(name: str, version: int) -> dict:
-    return json.loads((DATA / name).read_text(encoding="utf-8"))
+def load_json(data_dir: str, name: str, version: int) -> dict:
+    return json.loads((Path(data_dir) / name).read_text(encoding="utf-8"))
 
 
 @st.cache_data(show_spinner=False)
-def load_all(version: int) -> dict:
-    pred = load_parquet("test_predictions.parquet", version)
-    borrowers = load_parquet("sample_borrowers.parquet", version)
-    sequences = load_parquet("sample_sequences.parquet", version)
-    metrics = load_json("model_metrics.json", version)
+def load_all(data_dir: str, version: int) -> dict:
+    pred = load_parquet(data_dir, "test_predictions.parquet", version)
+    borrowers = load_parquet(data_dir, "sample_borrowers.parquet", version)
+    sequences = load_parquet(data_dir, "sample_sequences.parquet", version)
+    metrics = load_json(data_dir, "model_metrics.json", version)
     return {"predictions": pred, "borrowers": borrowers, "sequences": sequences,
-            "sensitivity": load_json("sensitivity.json", version),
-            "references": load_json("reference.json", version), "metrics": metrics,
+            "sensitivity": load_json(data_dir, "sensitivity.json", version),
+            "references": load_json(data_dir, "reference.json", version), "metrics": metrics,
             "static_results": {"results": [{"auc_roc": metrics["static"]["auc_roc"], "pr_auc": metrics["static"]["pr_auc"]}]},
             "behavioural_results": {"results": [{"auc_roc": metrics["behavioural_main"]["auc_roc"], "pr_auc": metrics["behavioural_main"]["pr_auc"]}]},
-            "null_results": {"results": [{"auc_roc": metrics["null"]["auc_roc"], "pr_auc": metrics["null"]["pr_auc"]}]}}
+            "null_results": {"results": [{"auc_roc": metrics["null"]["auc_roc"], "pr_auc": metrics["null"]["pr_auc"]}]} if "null" in metrics else {"results": []},
+            "lstm_results": {"results": [{"auc_roc": metrics["lstm"]["auc_roc"], "pr_auc": metrics["lstm"]["pr_auc"]}]} if "lstm" in metrics else {"results": []}, "scope": metrics.get("scope", SCOPE)}
 
 
 @st.cache_data(show_spinner=False)
@@ -80,7 +82,8 @@ def plot(fig: go.Figure, height: int | None = None) -> None:
 
 
 def page_header(title: str, desc: str) -> None:
-    st.markdown(f'<div class="page-head"><div><h1>{title}</h1><div class="page-desc">{desc}</div></div><div class="context-chip">Subsample run</div></div>', unsafe_allow_html=True)
+    profile = "Full run" if ACTIVE_PROFILE == "full" else "Subsample run"
+    st.markdown(f'<div class="page-head"><div><h1>{title}</h1><div class="page-desc">{desc}</div></div><div class="context-chip">{profile}</div></div>', unsafe_allow_html=True)
 
 
 def card_head(title: str, subtitle: str = "") -> None:
@@ -93,27 +96,35 @@ def tier_color(tier: str) -> str:
 
 
 def metric_df(data: dict) -> pd.DataFrame:
-    items = [("Static XGBoost", data["static_results"]), ("Behavioral XGBoost", data["behavioural_results"]),
-             ("Null-control behavioral XGBoost", data["null_results"])]
+    items = [("Static XGBoost", data["static_results"]), ("Behavioral XGBoost", data["behavioural_results"])]
+    if data["null_results"]["results"]: items.append(("Null-control behavioral XGBoost", data["null_results"]))
+    if data["lstm_results"]["results"]: items.append(("LSTM", data["lstm_results"]))
     return pd.DataFrame([{"Model": label, "ROC-AUC": float(value["results"][0]["auc_roc"]),
-                          "PR-AUC": float(value["results"][0]["pr_auc"]), "Scope": SCOPE} for label, value in items])
+                          "PR-AUC": float(value["results"][0]["pr_auc"]), "Scope": data["scope"]} for label, value in items])
 
 
 def draw_results(data: dict) -> None:
     page_header("Results", "Compare held-out model performance, decision thresholds, and sensitivity to the synthetic shock gap.")
     comp = metric_df(data)
     st.caption(SCOPE)
-    stat, beh, null = comp.iloc[0], comp.iloc[1], comp.iloc[2]
+    stat, beh = comp.iloc[0], comp.iloc[1]
+    extra = comp.iloc[2] if len(comp) > 2 else None
     k = st.columns(4)
     k[0].metric("Static ROC-AUC", f"{stat['ROC-AUC']:.4f}", help=SCOPE)
     k[1].metric("Behavioural ROC-AUC", f"{beh['ROC-AUC']:.4f}", f"{beh['ROC-AUC']-stat['ROC-AUC']:+.4f} vs static", help=SCOPE)
     k[2].metric("PR-AUC lift", f"{beh['PR-AUC']-stat['PR-AUC']:+.4f}", f"Behavioral − static", help=SCOPE)
-    k[3].metric("Null-control ROC-AUC", f"{null['ROC-AUC']:.4f}", f"{null['ROC-AUC']-stat['ROC-AUC']:+.4f} vs static", help=SCOPE)
+    if data["lstm_results"]["results"]:
+        k[3].metric("LSTM ROC-AUC", f"{extra['ROC-AUC']:.4f}", f"{extra['ROC-AUC']-stat['ROC-AUC']:+.4f} vs static", help=SCOPE)
+    else:
+        k[3].metric("Null-control ROC-AUC", f"{extra['ROC-AUC']:.4f}", f"{extra['ROC-AUC']-stat['ROC-AUC']:+.4f} vs static", help=SCOPE)
     left, right = st.columns([1.08, .92], gap="large")
     with left:
         card_head("Model comparison", SCOPE)
         fig = go.Figure()
-        for label, color in [("Static XGBoost", NAVY), ("Behavioral XGBoost", TEAL), ("Null-control behavioral XGBoost", GREY)]:
+        palette = [("Static XGBoost", NAVY), ("Behavioral XGBoost", TEAL), ("Null-control behavioral XGBoost", GREY), ("LSTM", GREY)]
+        for label, color in palette:
+            if label not in comp.Model.values:
+                continue
             row = comp.loc[comp.Model == label].iloc[0]
             fig.add_bar(name=label, x=["ROC-AUC", "PR-AUC"], y=[row["ROC-AUC"], row["PR-AUC"]], marker_color=color,
                         text=[f"{row['ROC-AUC']:.4f}", f"{row['PR-AUC']:.4f}"], textposition="outside", cliponaxis=False)
@@ -124,7 +135,9 @@ def draw_results(data: dict) -> None:
         pred = data["predictions"]
         default_t, f1_best = best_f1_threshold(tuple(pred.y_true.astype(int)), tuple(pred.p_behav.astype(float)))
         card_head("Decision threshold", "Live classification metrics on fixed test predictions")
-        model = st.selectbox("Score used for classification", ["p_behav", "p_static"], format_func=lambda x: "Behavioral XGBoost" if x == "p_behav" else "Static XGBoost")
+        score_options = ["p_behav", "p_static"] + (["p_lstm"] if "p_lstm" in pred.columns else [])
+        score_labels = {"p_behav":"Behavioral XGBoost", "p_static":"Static XGBoost", "p_lstm":"LSTM"}
+        model = st.selectbox("Score used for classification", score_options, format_func=lambda x: score_labels[x])
         threshold = st.slider("Classification threshold", 0.0, 1.0, float(default_t), 0.001, key="threshold", help=f"Best F1 threshold for behavioral predictions: {default_t:.3f} (F1 {f1_best:.3f}).")
         st.caption(f"Best-F1 marker: **{default_t:.3f}** · F1 {f1_best:.3f} ({SCOPE})")
         y = pred.y_true.astype(int).to_numpy(); yh = (pred[model].to_numpy() >= threshold).astype(int)
@@ -139,13 +152,19 @@ def draw_results(data: dict) -> None:
         fig.update_layout(title=f"Confusion matrix · {SCOPE}",height=250,margin={"l":20,"r":10,"t":50,"b":25},yaxis={"autorange":"reversed"})
         plot(fig,250)
     card_head("Sensitivity to assumed shock-probability gap", "Lift against the static subsample model")
-    sens=pd.DataFrame(data["sensitivity"]["rows"]); sens["ROC-AUC lift"]=sens.roc_auc-float(stat["ROC-AUC"]); sens["PR-AUC lift"]=sens.pr_auc-float(stat["PR-AUC"])
-    fig=go.Figure(); fig.add_scatter(x=sens.gap,y=sens["ROC-AUC lift"],name="ROC-AUC lift",mode="lines+markers+text",text=[f"{v:+.3f}" for v in sens["ROC-AUC lift"]],textposition="top center",line={"color":NAVY,"width":2.5})
-    fig.add_scatter(x=sens.gap,y=sens["PR-AUC lift"],name="PR-AUC lift",mode="lines+markers",line={"color":TEAL,"width":2.5})
-    fig.update_layout(height=300,xaxis_title="p(default shock) − p(non-default shock)",yaxis_title="Metric lift",margin={"t":24,"b":45})
-    plot(fig,300); st.caption(data["sensitivity"]["seed_note"])
+    sens=pd.DataFrame(data["sensitivity"]["rows"])
+    if not sens.empty and {"roc_auc", "pr_auc", "gap"}.issubset(sens.columns):
+        sens["ROC-AUC lift"]=sens.roc_auc-float(stat["ROC-AUC"]); sens["PR-AUC lift"]=sens.pr_auc-float(stat["PR-AUC"])
+        fig=go.Figure(); fig.add_scatter(x=sens.gap,y=sens["ROC-AUC lift"],name="ROC-AUC lift",mode="lines+markers+text",text=[f"{v:+.3f}" for v in sens["ROC-AUC lift"]],textposition="top center",line={"color":NAVY,"width":2.5})
+        fig.add_scatter(x=sens.gap,y=sens["PR-AUC lift"],name="PR-AUC lift",mode="lines+markers",line={"color":TEAL,"width":2.5})
+        fig.update_layout(height=300,xaxis_title="p(default shock) − p(non-default shock)",yaxis_title="Metric lift",margin={"t":24,"b":45})
+        plot(fig,300)
+    else:
+        st.info("Sensitivity analysis is unavailable for this run profile.")
+    st.caption(data["sensitivity"].get("seed_note", "Sensitivity analysis unavailable."))
     refs=data["references"]
-    st.markdown(f'<div class="card" style="background:#F2F3F7;border-style:dashed;box-shadow:none"><div class="card-title">Full-run reference, not subsample</div><div class="card-subtitle">Full-run ROC-AUC · Static {refs["static_roc_auc"]:.4f} &nbsp; Behavioural {refs["behavioural_roc_auc"]:.4f} &nbsp; LSTM {refs["lstm_roc_auc"]:.4f}. Behavioural reference is configurable; the other earlier script reported 0.7686.</div></div>',unsafe_allow_html=True)
+    if ACTIVE_PROFILE == "subsample":
+        st.markdown(f'<div class="card" style="background:#F2F3F7;border-style:dashed;box-shadow:none"><div class="card-title">Full-run reference, not subsample</div><div class="card-subtitle">Full-run ROC-AUC · Static {refs["static_roc_auc"]:.4f} &nbsp; Behavioural {refs["behavioural_roc_auc"]:.4f} &nbsp; LSTM {refs["lstm_roc_auc"]:.4f}. Behavioural reference is configurable; the other earlier script reported 0.7686.</div></div>',unsafe_allow_html=True)
 
 
 def draw_borrower_explorer(data: dict) -> None:
@@ -155,7 +174,7 @@ def draw_borrower_explorer(data: dict) -> None:
     tier=str(row.risk_tier); pct=float(row.behavioural_percentile); prob=float(row.p_behav)
     top_l,top_r=st.columns([1,1.35],gap="large")
     with top_l:
-        card_head("Relative risk tier (percentile rank in 60k test set)")
+        card_head("Relative risk tier (percentile rank in 563,771 test set)" if ACTIVE_PROFILE == "full" else "Relative risk tier (percentile rank in 60k test set)")
         fig=go.Figure(go.Indicator(mode="gauge+number",value=pct*100,number={"font":{"color":NAVY,"size":24}},
             title={"text":f"<b>{tier}</b>","font":{"color":tier_color(tier),"size":18}},
             gauge={"axis":{"range":[0,100],"showticklabels":False,"ticks":""},"bar":{"color":tier_color(tier),"thickness":.25},"bgcolor":"white","borderwidth":0,
@@ -163,6 +182,7 @@ def draw_borrower_explorer(data: dict) -> None:
         fig.update_layout(height=245,margin={"t":38,"b":4,"l":25,"r":25}); plot(fig,245)
         st.metric(f"Behavioural predicted probability · {SCOPE}",f"{prob:.3f}")
         st.caption("Risk tier is relative within the test-set score distribution.")
+        if "p_lstm" in row.index: st.metric(f"LSTM predicted probability · {SCOPE}", f"{float(row.p_lstm):.3f}")
     with top_r:
         card_head("Borrower facts", "Loan characteristics from the sampled test cohort")
         fields=[("Grade","grade"),("DTI","dti"),("Annual income","annual_inc"),("Loan amount","loan_amnt"),("Term","term"),("Interest rate","int_rate")]
@@ -172,8 +192,8 @@ def draw_borrower_explorer(data: dict) -> None:
             val=f"{val:,.0f}" if isinstance(val,(float,int,np.number)) and label in {"Annual income","Loan amount"} else (f"{val:.2f}" if isinstance(val,(float,int,np.number)) else str(val))
             fact_cells.append(f'<div class="fact-cell"><span>{label}</span><strong>{val}</strong></div>')
         st.markdown('<div class="facts-grid">'+"".join(fact_cells)+'</div>',unsafe_allow_html=True)
-        fuzzy=st.session_state.get(f"fuzzy_{selected}")
-        if fuzzy is None:
+        fuzzy=st.session_state.get(f"fuzzy_{selected}") if ACTIVE_PROFILE == "subsample" else None
+        if fuzzy is None and ACTIVE_PROFILE == "subsample":
             try:
                 from src.agents.orchestrator import run_pipeline
                 fuzzy=run_pipeline(int(selected))["steps"][2]["output"]["fuzzy_risk"]
@@ -223,12 +243,23 @@ def draw_borrower_explorer(data: dict) -> None:
         card_head("Narrative")
         fuzzy_text=f"The absolute fuzzy risk label is <b>{fuzzy['risk_linguistic']}</b>; " if fuzzy is not None else "The absolute fuzzy risk label is unavailable until optional agent inputs are supplied; "
         st.markdown(f'<div class="quote">The borrower is in the <b>{tier}</b> relative risk tier. {fuzzy_text}the leading eligible model drivers are {names}.</div>',unsafe_allow_html=True)
-        st.markdown('<div class="notice-card"><b>Attention view unavailable</b><br>Attention view requires the LSTM, not run on the subsample.</div>',unsafe_allow_html=True)
+        if ACTIVE_PROFILE == "full" and "attention_weights" in row.index:
+            card_head("LSTM attention · full-run")
+            att = np.asarray(row["attention_weights"], dtype=float)
+            fig = go.Figure(go.Heatmap(z=[att], x=list(range(1, len(att)+1)), y=["Attention"], colorscale=[[0,"#E8EBF3"],[1,TEAL]], showscale=False, hovertemplate="Month %{x}<br>Weight %{z:.4f}<extra></extra>"))
+            fig.update_layout(height=150, margin={"t":15,"b":20,"l":45,"r":10}, xaxis_title="Month")
+            plot(fig,150)
+            if "p_lstm" in row.index: st.metric(f"LSTM predicted probability · {SCOPE}", f"{float(row.p_lstm):.3f}")
+        else:
+            st.markdown('<div class="notice-card"><b>Attention view unavailable</b><br>Attention view requires the LSTM, not run on the subsample.</div>',unsafe_allow_html=True)
 
 
 def draw_agent_workflow(data: dict) -> None:
     page_header("Agent Workflow", "A deterministic demonstration of the planned borrower review sequence.")
     st.markdown('<div class="sim-banner">Rule-based simulation of the planned multi-agent architecture.</div>',unsafe_allow_html=True)
+    if ACTIVE_PROFILE == "full":
+        st.info("The deterministic agent inputs are currently packaged for the subsample profile; full-run model predictions and LSTM attention remain available in the other pages.")
+        return
     from src.agents.orchestrator import run_pipeline
     ids=data["borrowers"].loan_id.astype(int).tolist(); selected=st.selectbox("Sampled test borrower",ids,format_func=str,key="workflow_loan")
     if st.button("Run workflow",type="primary",use_container_width=False):
@@ -273,7 +304,7 @@ def draw_portfolio(data: dict) -> None:
         fig.update_layout(height=325,showlegend=False,margin={"t":18,"b":15,"l":10,"r":10},annotations=[{"text":f"{len(pred):,}<br><span style='font-size:11px'>test IDs</span>","showarrow":False,"font":{"size":21,"color":NAVY}}])
         plot(fig,325)
     with b:
-        card_head("Observed default rate by tier", "Mean y_true among test predictions in each relative tier")
+        card_head("Observed default rate by tier", f"Mean y_true among test predictions in each relative tier · {SCOPE}")
         fig=go.Figure(go.Bar(x=RISK_ORDER,y=rates.values,marker_color=[RISK_COLORS[t] for t in RISK_ORDER],
              text=[f"{v:.1%}" for v in rates.values],textposition="outside",cliponaxis=False,
              customdata=counts.values,hovertemplate="%{x}<br>Observed default rate: %{y:.3f}<br>Borrowers: %{customdata:,}<extra></extra>"))
@@ -298,25 +329,30 @@ def draw_portfolio(data: dict) -> None:
 def draw_methodology(data: dict) -> None:
     page_header("Methodology and Limitations", "A compact view of the cohort, modeling pipeline, and limits on interpretation.")
     card_head("Research pipeline")
-    labels=["Resolved Lending Club\nloans","Cleaned cohort\n1,879,234 × 71","Fixed-ID subsample\n200k borrowers","Synthetic monthly\nbehavior","Static + behavioral\nXGBoost","Explainable review\n+ simulated action"]
+    cohort_label = "Full test cohort\n563,771 borrowers" if ACTIVE_PROFILE == "full" else "Fixed-ID subsample\n200k borrowers"
+    labels=["Resolved Lending Club\nloans","Cleaned cohort\n1,879,234 × 71",cohort_label,"Synthetic monthly\nbehavior","Static + behavioral\nXGBoost + LSTM" if ACTIVE_PROFILE == "full" else "Static + behavioral\nXGBoost","Explainable review\n+ simulated action"]
     cols=st.columns([1, .15, 1, .15, 1, .15, 1, .15, 1, .15, 1])
     for i,label in enumerate(labels):
         with cols[2*i]: st.markdown(f'<div class="flow-box">{label.replace(chr(10),"<br>")}</div>',unsafe_allow_html=True)
         if i<len(labels)-1:
             with cols[2*i+1]: st.markdown('<div style="text-align:center;color:#028090;font-size:1.4rem;padding-top:9px">→</div>',unsafe_allow_html=True)
-    st.caption("The LSTM was not run on this subsample.")
+    st.caption("Full profile includes saved LSTM inference." if ACTIVE_PROFILE == "full" else "The LSTM was not run on this subsample.")
     card_head("Dataset facts",SCOPE)
-    facts=[("Source cohort","1,879,234 resolved loans"),("Cleaned columns","71"),("Subsample","200,000 borrowers"),("Training IDs","140,000"),("Test IDs","60,000"),("Early-default rate","20.19% before subsampling")]
+    if ACTIVE_PROFILE == "full":
+        facts=[("Source cohort","1,879,234 resolved loans"),("Cleaned columns","71"),("Run profile","Full dataset"),("Test IDs","563,771"),("Early-default rate","20.19% before subsampling")]
+    else:
+        facts=[("Source cohort","1,879,234 resolved loans"),("Cleaned columns","71"),("Subsample","200,000 borrowers"),("Training IDs","140,000"),("Test IDs","60,000"),("Early-default rate","20.19% before subsampling")]
     c=st.columns(3)
     for i,(name,value) in enumerate(facts):
         with c[i%3]: st.metric(name,value)
-    null=data["null_results"]["results"][0]
-    card_head("Null-control result")
-    st.write(f"Null-control subsample result: ROC-AUC {null['auc_roc']:.4f}, PR-AUC {null['pr_auc']:.4f} ({SCOPE}).")
-    fidelity=float(data["metrics"]["surrogate_r2"])
+    if data["null_results"]["results"]:
+        null=data["null_results"]["results"][0]
+        card_head("Null-control result")
+        st.write(f"Null-control subsample result: ROC-AUC {null['auc_roc']:.4f}, PR-AUC {null['pr_auc']:.4f} ({SCOPE}).")
+    fidelity=data["metrics"].get("surrogate_r2")
     limitations=[
         ("Behavioral data is synthetic.","The lift depends on the assumed shock-probability gap (about +0.037 ROC-AUC at 0.35 vs 0.12, under +0.01 at a gap of 0.11)."),
-        ("The surrogate is an approximation.",f"Its R² is {fidelity:.3f} against the paper's about 0.807."),
+        ("The surrogate is an approximation.",f"Its R² is {fidelity:.3f} against the paper's about 0.807." if fidelity is not None else "Surrogate fidelity was not computed for this full-run profile."),
         ("A loan-vintage feature remains in the model.","issue_d is inherited from the base-paper reproduction and hidden from driver displays."),
         ("LSTM was not rerun on the subsample.","It underperformed in the full run (0.6379 ROC-AUC)."),
     ]
@@ -326,28 +362,48 @@ def draw_methodology(data: dict) -> None:
 
 
 def main() -> None:
+    global DATA, ACTIVE_PROFILE, SCOPE
+    full_dir = ROOT / "dashboard" / "data_full"
+    full_ready = full_dir.is_dir() and all((full_dir / name).is_file() for name in REQUIRED_DATA_FILES)
     st.sidebar.markdown('<div class="sidebar-brand"><strong>Behavioural Risk<br>Research</strong><span>Explainable pre-delinquency patterns</span></div>',unsafe_allow_html=True)
+    if full_ready:
+        profile = st.sidebar.radio("Run profile", ["Subsample", "Full run"], horizontal=True, key="run_profile")
+    else:
+        st.sidebar.radio("Run profile", ["Subsample"], horizontal=True, disabled=True, key="run_profile_disabled")
+        if not full_dir.is_dir():
+            st.sidebar.caption("Full run is unavailable: dashboard/data_full/ is missing. Build it with dashboard/build_dashboard_data.py --run full.")
+        else:
+            missing_full = [name for name in REQUIRED_DATA_FILES if not (full_dir / name).is_file()]
+            st.sidebar.caption("Full run is unavailable: missing dashboard/data_full file(s): " + ", ".join(missing_full) + ". Build with dashboard/build_dashboard_data.py --run full.")
+        profile = "Subsample"
+    ACTIVE_PROFILE = "full" if profile == "Full run" else "subsample"
+    if ACTIVE_PROFILE == "full":
+        DATA = full_dir
+        SCOPE = "Full dataset, 563,771 test"
+    else:
+        DATA = ROOT / "dashboard" / "data"
+        SCOPE = "200k-borrower subsample, 60k test"
     choice=st.sidebar.radio("Navigate",PAGES,format_func=lambda p:f"{NAV[p]}   {p}",label_visibility="collapsed")
     missing = [name for name in REQUIRED_DATA_FILES if not (DATA / name).is_file()]
     if missing:
-        st.error(
-            "Dashboard data is incomplete. Missing file(s): "
-            + ", ".join(f"dashboard/data/{name}" for name in missing)
-            + ". Create these files by running dashboard/build_dashboard_data.py "
-            "after the required model and subsample artifacts are available."
-        )
+        st.error("Dashboard data is incomplete. Missing file(s): "
+                 + ", ".join(f"{DATA.relative_to(ROOT).as_posix()}/{name}" for name in missing)
+                 + f". Create these files by running dashboard/build_dashboard_data.py --run {ACTIVE_PROFILE} after the required artifacts are available.")
         st.stop()
     try:
         files=[DATA/n for n in REQUIRED_DATA_FILES]
-        version=max(p.stat().st_mtime_ns for p in files); data=load_all(version)
-    except Exception as exc: st.error(f"Dashboard data could not be loaded: {exc}"); st.stop()
+        version=max(p.stat().st_mtime_ns for p in files)
+        data=load_all(str(DATA),version)
+    except Exception as exc:
+        st.error(f"Dashboard data could not be loaded: {exc}")
+        st.stop()
     try:
         branch=subprocess.check_output(["git","rev-parse","--abbrev-ref","HEAD"],cwd=ROOT,text=True,stderr=subprocess.DEVNULL).strip()
         commit=subprocess.check_output(["git","rev-parse","--short","HEAD"],cwd=ROOT,text=True,stderr=subprocess.DEVNULL).strip()
-    except Exception: branch,commit="subsample-rebuild","local"
+    except Exception:
+        branch,commit="dashboard-redesign","local"
     st.sidebar.markdown(f'<div class="sidebar-foot">{SCOPE}<br>{branch} · {commit}</div>',unsafe_allow_html=True)
     {"Results":draw_results,"Borrower Explorer":draw_borrower_explorer,"Agent Workflow":draw_agent_workflow,
      "Portfolio":draw_portfolio,"Methodology and Limitations":draw_methodology}[choice](data)
-
 
 if __name__ == "__main__": main()
