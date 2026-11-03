@@ -1,10 +1,11 @@
 # Core
-pandas>=2.0
-numpy>=1.24
-scikit-learn>=1.3
+pandas==2.3.3
+numpy==2.2.6
+scikit-learn==1.7.2
+pyarrow==25.0.1
 
 # Baseline model (matches base paper)
-xgboost>=2.0
+xgboost==3.2.0
 
 # Temporal deep learning
 torch>=2.1
@@ -25,5 +26,5 @@ kaggle>=1.6
 tqdm>=4.66
 
 # Dashboard
-streamlit>=1.36
-plotly>=5.20
+streamlit==1.65.0
+plotly==7.1.0

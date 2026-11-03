@@ -20,6 +20,14 @@ from dashboard.theme import (AMBER_BG, BORDER, GREY, GRID, INK, MUTED, NAVY, PAG
                              CUSTOM_CSS)
 
 SCOPE = "200k-borrower subsample, 60k test"
+REQUIRED_DATA_FILES = [
+    "test_predictions.parquet",
+    "sample_borrowers.parquet",
+    "sample_sequences.parquet",
+    "sensitivity.json",
+    "reference.json",
+    "model_metrics.json",
+]
 PAGES = ["Results", "Borrower Explorer", "Agent Workflow", "Portfolio", "Methodology and Limitations"]
 NAV = {"Results": "▤", "Borrower Explorer": "⌕", "Agent Workflow": "⑂", "Portfolio": "▥", "Methodology and Limitations": "◫"}
 st.set_page_config(page_title="Behavioural Loan Risk Research", layout="wide", initial_sidebar_state="expanded")
@@ -166,10 +174,16 @@ def draw_borrower_explorer(data: dict) -> None:
         st.markdown('<div class="facts-grid">'+"".join(fact_cells)+'</div>',unsafe_allow_html=True)
         fuzzy=st.session_state.get(f"fuzzy_{selected}")
         if fuzzy is None:
-            from src.agents.orchestrator import run_pipeline
-            fuzzy=run_pipeline(int(selected))["steps"][2]["output"]["fuzzy_risk"]
+            try:
+                from src.agents.orchestrator import run_pipeline
+                fuzzy=run_pipeline(int(selected))["steps"][2]["output"]["fuzzy_risk"]
+            except (FileNotFoundError, OSError) as exc:
+                st.caption(f"Fuzzy category is unavailable because an optional agent input is absent: {exc.filename or exc}.")
         st.markdown('<span title="This fuzzy label is an absolute probability category. The percentile tier ranks this borrower against the 60k test set, so the labels can differ because one is probability-based and the other is relative to this cohort."><b>Absolute risk label (fuzzy, from predicted probability) ⓘ</b></span>',unsafe_allow_html=True)
-        st.markdown(f'<span class="risk-pill" style="background:{tier_color(tier)}">{fuzzy["risk_linguistic"]}</span>',unsafe_allow_html=True)
+        if fuzzy is not None:
+            st.markdown(f'<span class="risk-pill" style="background:{tier_color(tier)}">{fuzzy["risk_linguistic"]}</span>',unsafe_allow_html=True)
+        else:
+            st.caption("Unavailable in a fresh clone until the optional agent inputs are supplied.")
     seq=data["sequences"].loc[data["sequences"].loan_id.astype(int)==int(selected)].sort_values("month")
     card_head("24-month trajectories", "Synthetic borrower behavior · common month axis")
     cols=[("Salary delay","salary_delay_days"),("Account balance","account_balance"),("Savings","savings_balance"),("Discretionary spend","discretionary_spend")]
@@ -201,10 +215,14 @@ def draw_borrower_explorer(data: dict) -> None:
             st.caption("Red increases the model score; teal decreases it.")
     with dr:
         from src.agents.orchestrator import run_pipeline
-        pipeline=run_pipeline(int(selected)); fuzzy=pipeline["steps"][2]["output"]["fuzzy_risk"]
+        try:
+            pipeline=run_pipeline(int(selected)); fuzzy=pipeline["steps"][2]["output"]["fuzzy_risk"]
+        except (FileNotFoundError, OSError) as exc:
+            fuzzy=None
         names=", ".join(d["feature"] for d in drivers[:2]) if drivers else "no eligible feature in the displayed list"
         card_head("Narrative")
-        st.markdown(f'<div class="quote">The borrower is in the <b>{tier}</b> relative risk tier. The absolute fuzzy risk label is <b>{fuzzy["risk_linguistic"]}</b>; the leading eligible model drivers are {names}.</div>',unsafe_allow_html=True)
+        fuzzy_text=f"The absolute fuzzy risk label is <b>{fuzzy['risk_linguistic']}</b>; " if fuzzy is not None else "The absolute fuzzy risk label is unavailable until optional agent inputs are supplied; "
+        st.markdown(f'<div class="quote">The borrower is in the <b>{tier}</b> relative risk tier. {fuzzy_text}the leading eligible model drivers are {names}.</div>',unsafe_allow_html=True)
         st.markdown('<div class="notice-card"><b>Attention view unavailable</b><br>Attention view requires the LSTM, not run on the subsample.</div>',unsafe_allow_html=True)
 
 
@@ -213,7 +231,13 @@ def draw_agent_workflow(data: dict) -> None:
     st.markdown('<div class="sim-banner">Rule-based simulation of the planned multi-agent architecture.</div>',unsafe_allow_html=True)
     from src.agents.orchestrator import run_pipeline
     ids=data["borrowers"].loan_id.astype(int).tolist(); selected=st.selectbox("Sampled test borrower",ids,format_func=str,key="workflow_loan")
-    if st.button("Run workflow",type="primary",use_container_width=False): st.session_state.agent_result=run_pipeline(int(selected))
+    if st.button("Run workflow",type="primary",use_container_width=False):
+        try:
+            st.session_state.agent_result=run_pipeline(int(selected))
+            st.session_state.agent_error=None
+        except (FileNotFoundError, OSError) as exc:
+            st.session_state.agent_result=None
+            st.session_state.agent_error=str(exc.filename or exc)
     result=st.session_state.get("agent_result")
     if result:
         labels=["Behaviour scan","Risk assessment","Explanation","Intervention"]
@@ -228,7 +252,11 @@ def draw_agent_workflow(data: dict) -> None:
                     st.caption("OUTPUT"); st.json(step["output"])
                 st.caption("simulated: true")
     else:
-        st.markdown('<div class="notice-card">Select a sampled test borrower and run the four-step workflow.</div>',unsafe_allow_html=True)
+        error=st.session_state.get("agent_error")
+        if error:
+            st.warning(f"The simulated workflow needs an optional agent input that is not included in a fresh clone: {error}")
+        else:
+            st.markdown('<div class="notice-card">Select a sampled test borrower and run the four-step workflow.</div>',unsafe_allow_html=True)
 
 
 def draw_portfolio(data: dict) -> None:
@@ -300,8 +328,17 @@ def draw_methodology(data: dict) -> None:
 def main() -> None:
     st.sidebar.markdown('<div class="sidebar-brand"><strong>Behavioural Risk<br>Research</strong><span>Explainable pre-delinquency patterns</span></div>',unsafe_allow_html=True)
     choice=st.sidebar.radio("Navigate",PAGES,format_func=lambda p:f"{NAV[p]}   {p}",label_visibility="collapsed")
+    missing = [name for name in REQUIRED_DATA_FILES if not (DATA / name).is_file()]
+    if missing:
+        st.error(
+            "Dashboard data is incomplete. Missing file(s): "
+            + ", ".join(f"dashboard/data/{name}" for name in missing)
+            + ". Create these files by running dashboard/build_dashboard_data.py "
+            "after the required model and subsample artifacts are available."
+        )
+        st.stop()
     try:
-        files=[DATA/n for n in ["test_predictions.parquet","sample_borrowers.parquet","sample_sequences.parquet","sensitivity.json","reference.json","model_metrics.json"]]
+        files=[DATA/n for n in REQUIRED_DATA_FILES]
         version=max(p.stat().st_mtime_ns for p in files); data=load_all(version)
     except Exception as exc: st.error(f"Dashboard data could not be loaded: {exc}"); st.stop()
     try:

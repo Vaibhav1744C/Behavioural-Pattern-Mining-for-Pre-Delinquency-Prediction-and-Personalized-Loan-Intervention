@@ -222,6 +222,30 @@ dashboard/          (Phase 7)
 
 See `SUMMARY.md` for full details on each phase.
 
+## Run the dashboard
+
+The dashboard and its compact fixtures are included in the repository. A fresh
+clone does not need the raw Lending Club dataset or the large full-run model
+artifacts to open the dashboard.
+
+```bash
+git clone --branch dashboard-redesign https://github.com/Vaibhav1744C/Behavioural-Pattern-Mining-for-Pre-Delinquency-Prediction-and-Personalized-Loan-Intervention.git
+cd Behavioural-Pattern-Mining-for-Pre-Delinquency-Prediction-and-Personalized-Loan-Intervention
+python -m venv venv
+
+# Windows PowerShell
+venv\Scripts\Activate.ps1
+
+# macOS/Linux (use this instead of the PowerShell activation command)
+# source venv/bin/activate
+
+pip install -r requirements.txt
+streamlit run dashboard/app.py
+```
+
+See [DATA.md](DATA.md) for the large artifacts needed to regenerate the full
+research run and the scripts that create them.
+
 ---
 
 ## Team

@@ -1,17 +1,20 @@
-# ── Dataset files (never commit raw/large data) ───────────────────────────────
-data/raw/*.csv
-data/raw/*.gzip
-data/raw/*.gz
-data/raw/*.parquet
-data/raw/*.zip
-data/processed/*.parquet
-data/processed/*.csv
-data/synthetic/*.parquet
-data/synthetic/*.csv
-
-# Keep the README and dictionary in raw/
+# ── Data artifacts (keep large datasets and model arrays out of git) ──────────
+data/
+!data/
+data/*
+!data/raw/
+data/raw/*
 !data/raw/README.md
 !data/raw/LCDataDictionary.xlsx
+*.npy
+*.pkl
+*.pt
+*.parquet
+
+# The compact, committed dashboard fixtures are the only parquet exception.
+!dashboard/data/
+!dashboard/data/*.parquet
+!dashboard/data/*.json
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
@@ -50,8 +53,6 @@ kaggle.json
 
 # ── Logs ──────────────────────────────────────────────────────────────────────
 logs/
-*.pkl
 *.joblib
-*.pt
 *.pth
 *.onnx
