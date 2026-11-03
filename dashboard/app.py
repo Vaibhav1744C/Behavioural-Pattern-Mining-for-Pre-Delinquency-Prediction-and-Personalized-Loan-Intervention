@@ -57,34 +57,23 @@ def load_json(name: str, cache_version: int) -> dict:
 
 
 @st.cache_data(show_spinner=False)
-def load_surrogate_fidelity(cache_version: int) -> dict:
-    with (ROOT / "reports" / "surrogate_fidelity_subsample.json").open(encoding="utf-8") as f:
-        return json.load(f)
-
-
-@st.cache_data(show_spinner=False)
-def load_report_json(name: str, cache_version: int) -> dict:
-    with (ROOT / "reports" / name).open(encoding="utf-8") as f:
-        return json.load(f)
-
-
-@st.cache_data(show_spinner=False)
 def load_data(cache_version: int) -> dict:
     predictions = load_parquet("test_predictions.parquet", cache_version)
     borrowers = load_parquet("sample_borrowers.parquet", cache_version)
     sequences = load_parquet("sample_sequences.parquet", cache_version)
     sensitivity = load_json("sensitivity.json", cache_version)
     references = load_json("reference.json", cache_version)
+    model_metrics = load_json("model_metrics.json", cache_version)
     return {
         "predictions": predictions,
         "borrowers": borrowers,
         "sequences": sequences,
         "sensitivity": sensitivity,
         "references": references,
-        "fidelity": load_surrogate_fidelity(cache_version),
-        "static_results": load_report_json("baseline_subsample_results.json", cache_version),
-        "behavioural_results": load_report_json("xgboost_behavioural_results_subsample.json", cache_version),
-        "null_results": load_report_json("xgboost_behavioural_results_null.json", cache_version),
+        "fidelity": {"xgb_behavioural": model_metrics["surrogate_r2"]},
+        "static_results": {"results": [{"auc_roc": model_metrics["static"]["auc_roc"], "pr_auc": model_metrics["static"]["pr_auc"]}]},
+        "behavioural_results": {"results": [{"auc_roc": model_metrics["behavioural_main"]["auc_roc"], "pr_auc": model_metrics["behavioural_main"]["pr_auc"]}]},
+        "null_results": {"results": [{"auc_roc": model_metrics["null"]["auc_roc"], "pr_auc": model_metrics["null"]["pr_auc"]}]},
     }
 
 
@@ -326,10 +315,7 @@ def main() -> None:
         files = [
             DATA / "test_predictions.parquet", DATA / "sample_borrowers.parquet",
             DATA / "sample_sequences.parquet", DATA / "sensitivity.json",
-            DATA / "reference.json", ROOT / "reports" / "surrogate_fidelity_subsample.json",
-            ROOT / "reports" / "baseline_subsample_results.json",
-            ROOT / "reports" / "xgboost_behavioural_results_subsample.json",
-            ROOT / "reports" / "xgboost_behavioural_results_null.json",
+            DATA / "reference.json", DATA / "model_metrics.json",
         ]
         cache_version = max(path.stat().st_mtime_ns for path in files)
         data = load_data(cache_version)

@@ -1,0 +1,19 @@
+{
+  "scope": "200k-borrower subsample, 60k test",
+  "static": {
+    "label": "Static XGBoost",
+    "auc_roc": 0.7254,
+    "pr_auc": 0.4018
+  },
+  "behavioural_main": {
+    "label": "Behavioral XGBoost",
+    "auc_roc": 0.7625,
+    "pr_auc": 0.4781
+  },
+  "null": {
+    "label": "Null-control behavioral XGBoost",
+    "auc_roc": 0.7255,
+    "pr_auc": 0.4009
+  },
+  "surrogate_r2": 0.775
+}

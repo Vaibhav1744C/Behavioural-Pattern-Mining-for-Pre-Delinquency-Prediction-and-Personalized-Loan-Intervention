@@ -52,7 +52,7 @@ def _require_inputs() -> None:
     outputs = [
         OUT / "test_predictions.parquet", OUT / "sample_borrowers.parquet",
         OUT / "sample_sequences.parquet", OUT / "sensitivity.json",
-        OUT / "reference.json",
+        OUT / "reference.json", OUT / "model_metrics.json",
     ]
     existing = [str(path) for path in outputs if path.exists()]
     if existing:
@@ -245,6 +245,19 @@ def main() -> None:
             "behavioural_roc_auc_configurable": True,
             "behavioural_alternate_reported_value": 0.7686,
             "lstm_roc_auc": 0.6379,
+        }, f, indent=2)
+
+    with (ROOT / "reports" / "xgboost_behavioural_results_null.json").open(encoding="utf-8") as f:
+        null_metrics = json.load(f)["results"][0]
+    with (ROOT / "reports" / "surrogate_fidelity_subsample.json").open(encoding="utf-8") as f:
+        surrogate_r2 = float(json.load(f)["xgb_behavioural"])
+    with (OUT / "model_metrics.json").open("x", encoding="utf-8") as f:
+        json.dump({
+            "scope": "200k-borrower subsample, 60k test",
+            "static": {"label": "Static XGBoost", "auc_roc": static_auc, "pr_auc": static_ap},
+            "behavioural_main": {"label": "Behavioral XGBoost", "auc_roc": behavioural_auc, "pr_auc": behavioural_ap},
+            "null": {"label": "Null-control behavioral XGBoost", "auc_roc": null_metrics["auc_roc"], "pr_auc": null_metrics["pr_auc"]},
+            "surrogate_r2": surrogate_r2,
         }, f, indent=2)
 
     print(f"Test rows: {len(prediction):,}")
