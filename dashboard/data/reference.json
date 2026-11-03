@@ -1,0 +1,8 @@
+{
+  "scope": "Full-run reference (not subsample metrics)",
+  "static_roc_auc": 0.7345,
+  "behavioural_roc_auc": 0.7698,
+  "behavioural_roc_auc_configurable": true,
+  "behavioural_alternate_reported_value": 0.7686,
+  "lstm_roc_auc": 0.6379
+}

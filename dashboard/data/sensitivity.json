@@ -1,0 +1,51 @@
+{
+  "scope": "200k-borrower subsample, 60k test",
+  "seed_note": "The 0.05, 0.11 and 0.15 gap runs used seed 43.",
+  "rows": [
+    {
+      "gap": 0.0,
+      "p_shock_default": 0.2,
+      "p_shock_nondefault": 0.2,
+      "seed": 42,
+      "roc_auc": 0.7255,
+      "pr_auc": 0.4009,
+      "run": "null"
+    },
+    {
+      "gap": 0.05,
+      "p_shock_default": 0.25,
+      "p_shock_nondefault": 0.2,
+      "seed": 43,
+      "roc_auc": 0.7269,
+      "pr_auc": 0.403,
+      "run": "p025_020_s43"
+    },
+    {
+      "gap": 0.11,
+      "p_shock_default": 0.28,
+      "p_shock_nondefault": 0.17,
+      "seed": 43,
+      "roc_auc": 0.7329,
+      "pr_auc": 0.414,
+      "run": "p028_017_s43"
+    },
+    {
+      "gap": 0.15,
+      "p_shock_default": 0.3,
+      "p_shock_nondefault": 0.15,
+      "seed": 43,
+      "roc_auc": 0.7408,
+      "pr_auc": 0.4291,
+      "run": "p030_015_s43"
+    },
+    {
+      "gap": 0.23,
+      "p_shock_default": 0.35,
+      "p_shock_nondefault": 0.12,
+      "seed": 42,
+      "roc_auc": 0.7625,
+      "pr_auc": 0.4781,
+      "run": "main_subsample"
+    }
+  ]
+}

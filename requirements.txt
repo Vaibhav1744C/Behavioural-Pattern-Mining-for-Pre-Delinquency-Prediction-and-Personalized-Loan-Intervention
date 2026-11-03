@@ -23,3 +23,7 @@ seaborn>=0.12
 jupyter>=1.0
 kaggle>=1.6
 tqdm>=4.66
+
+# Dashboard
+streamlit>=1.36
+plotly>=5.20
