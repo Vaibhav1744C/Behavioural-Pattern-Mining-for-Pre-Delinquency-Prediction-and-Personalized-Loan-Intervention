@@ -135,12 +135,28 @@ def build_dense_array(
 
 # ── Train/test split extraction ───────────────────────────────────────────────
 
-def extract_train_ids(all_ids: list) -> pd.DataFrame:
+def extract_train_ids(all_ids: list, loan_ids_file: Path | None = None) -> pd.DataFrame:
     """
     Train loan_ids = all_loan_ids - X_test loan_ids.
     Reuses the exact same test set as Phase 2 for an apples-to-apples
     AUC comparison.
     """
+    if loan_ids_file is not None:
+        split_df = pd.read_parquet(loan_ids_file)
+        if not {"loan_id", "split"}.issubset(split_df.columns):
+            raise KeyError("--loan-ids-file must contain loan_id and split columns")
+        if split_df["loan_id"].duplicated().any():
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        if set(split_df["split"].unique()) - {"train", "test"}:
+            raise ValueError("split values in --loan-ids-file must be 'train' or 'test'")
+        selected_ids = set(int(lid) for lid in all_ids)
+        file_ids = set(split_df["loan_id"].astype("int64"))
+        if selected_ids != file_ids:
+            raise ValueError("LSTM feature IDs do not exactly match --loan-ids-file")
+        train_df = split_df.loc[split_df["split"] == "train", ["loan_id"]].copy()
+        print(f"  Fixed split: {len(train_df):,} train / {(split_df['split'] == 'test').sum():,} test")
+        return train_df.reset_index(drop=True)
+
     if not X_TEST_PATH.exists():
         raise FileNotFoundError(
             f"X_test.parquet not found at {X_TEST_PATH}.\n"
@@ -184,6 +200,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="Phase 5 data prep")
     p.add_argument("--sample",   type=int, default=None,
                    help="Only process N borrowers (quick test)")
+    p.add_argument("--loan-ids-file", type=Path, default=None,
+                   help="Parquet file with the fixed loan_id set and split labels")
     p.add_argument("--ablation", action="store_true",
                    help="Also build dense array for alpha=0 ablation sequences")
     return p.parse_args()
@@ -191,6 +209,21 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.sample and args.loan_ids_file:
+        raise ValueError("Use either --sample or --loan-ids-file, not both")
+    subsample_tag = args.loan_ids_file is not None
+    seq_path = ROOT / "data" / "processed" / (
+        "lstm_sequences_subsample.parquet" if subsample_tag else LSTM_SEQ_PATH.name
+    )
+    dense_out = ROOT / "data" / "processed" / (
+        "lstm_sequences_dense_subsample.npy" if subsample_tag else DENSE_OUT.name
+    )
+    index_out = ROOT / "data" / "processed" / (
+        "lstm_loan_id_index_subsample.parquet" if subsample_tag else INDEX_OUT.name
+    )
+    train_ids_out = ROOT / "data" / "processed" / (
+        "train_loan_ids_subsample.parquet" if subsample_tag else TRAIN_IDS_OUT.name
+    )
 
     print("=" * 64)
     print("Phase 5 Data Prep — build dense arrays + train/test split")
@@ -199,7 +232,7 @@ def main():
     # ── 1. Get canonical loan_id order from lstm_sequences.parquet ────────────
     print("\n[1/4] Reading loan_id order from lstm_sequences.parquet...")
     all_ids = (
-        pq.read_table(LSTM_SEQ_PATH, columns=["loan_id"])
+        pq.read_table(seq_path, columns=["loan_id"])
         .to_pandas()["loan_id"]
         .unique()
         .tolist()
@@ -207,32 +240,48 @@ def main():
     print(f"  Total borrowers: {len(all_ids):,}")
 
     sample_ids = None
-    if args.sample:
+    if args.loan_ids_file:
+        requested = pd.read_parquet(args.loan_ids_file)
+        if not {"loan_id", "split"}.issubset(requested.columns):
+            raise KeyError("--loan-ids-file must contain loan_id and split columns")
+        requested_ids = requested["loan_id"].astype("int64").tolist()
+        if len(requested_ids) != len(set(requested_ids)):
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        if set(requested["split"].unique()) - {"train", "test"}:
+            raise ValueError("split values in --loan-ids-file must be 'train' or 'test'")
+        sequence_ids = set(int(lid) for lid in all_ids)
+        missing_ids = set(requested_ids) - sequence_ids
+        if missing_ids:
+            raise ValueError(f"{len(missing_ids):,} requested IDs are absent from {seq_path}")
+        all_ids = requested_ids
+        sample_ids = set(requested_ids)
+        print(f"  Fixed borrower IDs: {len(all_ids):,} from {args.loan_ids_file}")
+    elif args.sample:
         all_ids    = all_ids[:args.sample]
         sample_ids = set(all_ids)
         print(f"  Subsetting to {len(all_ids):,} borrowers (--sample)")
 
     # ── 2. Build dense array ──────────────────────────────────────────────────
     print("\n[2/4] Building dense array from lstm_sequences.parquet...")
-    arr = build_dense_array(LSTM_SEQ_PATH, all_ids, sample_ids)
+    arr = build_dense_array(seq_path, all_ids, sample_ids)
 
-    DENSE_OUT.parent.mkdir(parents=True, exist_ok=True)
-    np.save(DENSE_OUT, arr)
-    size_mb = DENSE_OUT.stat().st_size / (1024 ** 2)
-    print(f"  Saved: {DENSE_OUT.relative_to(ROOT)}  ({size_mb:.1f} MB)")
+    dense_out.parent.mkdir(parents=True, exist_ok=True)
+    np.save(dense_out, arr)
+    size_mb = dense_out.stat().st_size / (1024 ** 2)
+    print(f"  Saved: {dense_out.relative_to(ROOT)}  ({size_mb:.1f} MB)")
     del arr
 
     # ── 3. Save loan_id -> row_index mapping ──────────────────────────────────
     print("\n[3/4] Saving loan_id index mapping...")
     idx_df = pd.DataFrame({"loan_id": all_ids, "row_index": range(len(all_ids))})
-    idx_df.to_parquet(INDEX_OUT, index=False)
-    print(f"  Saved: {INDEX_OUT.relative_to(ROOT)}  ({len(idx_df):,} rows)")
+    idx_df.to_parquet(index_out, index=False)
+    print(f"  Saved: {index_out.relative_to(ROOT)}  ({len(idx_df):,} rows)")
 
     # ── 4. Extract train/test split ───────────────────────────────────────────
     print("\n[4/4] Extracting train loan_ids (all - test)...")
-    train_df = extract_train_ids(all_ids)
-    train_df.to_parquet(TRAIN_IDS_OUT, index=False)
-    print(f"  Saved: {TRAIN_IDS_OUT.relative_to(ROOT)}  ({len(train_df):,} rows)")
+    train_df = extract_train_ids(all_ids, args.loan_ids_file)
+    train_df.to_parquet(train_ids_out, index=False)
+    print(f"  Saved: {train_ids_out.relative_to(ROOT)}  ({len(train_df):,} rows)")
 
     # ── Optional: ablation dense array ───────────────────────────────────────
     if args.ablation:
@@ -259,9 +308,9 @@ def main():
 
     print("\n" + "=" * 64)
     print("Phase 5 data prep complete.")
-    print(f"  Dense array : {DENSE_OUT.relative_to(ROOT)}")
-    print(f"  ID index    : {INDEX_OUT.relative_to(ROOT)}")
-    print(f"  Train IDs   : {TRAIN_IDS_OUT.relative_to(ROOT)}")
+    print(f"  Dense array : {dense_out.relative_to(ROOT)}")
+    print(f"  ID index    : {index_out.relative_to(ROOT)}")
+    print(f"  Train IDs   : {train_ids_out.relative_to(ROOT)}")
     print("=" * 64)
 
 

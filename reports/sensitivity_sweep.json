@@ -1,0 +1,71 @@
+{
+  "description": "Vanilla XGBoost sensitivity sweep on fixed 200,000-loan subsample; all behavioral variants use the same 140,000 train IDs and 60,000 test IDs.",
+  "rows": [
+    {
+      "run": "static_subsample",
+      "p_shock_default": null,
+      "p_shock_nondefault": null,
+      "seed": null,
+      "model": "static XGBoost vanilla",
+      "roc_auc": 0.7254,
+      "pr_auc": 0.4018,
+      "test_rows": 60000,
+      "source": "baseline_subsample_results.json"
+    },
+    {
+      "run": "null",
+      "p_shock_default": 0.20,
+      "p_shock_nondefault": 0.20,
+      "seed": 42,
+      "model": "behavioral XGBoost vanilla",
+      "roc_auc": 0.7255,
+      "pr_auc": 0.4009,
+      "test_rows": 60000,
+      "source": "xgboost_behavioural_results_null.json"
+    },
+    {
+      "run": "p025_020_s43",
+      "p_shock_default": 0.25,
+      "p_shock_nondefault": 0.20,
+      "seed": 43,
+      "model": "behavioral XGBoost vanilla",
+      "roc_auc": 0.7269,
+      "pr_auc": 0.4030,
+      "test_rows": 60000,
+      "source": "xgboost_behavioural_results_p025_020_s43.json"
+    },
+    {
+      "run": "p028_017_s43",
+      "p_shock_default": 0.28,
+      "p_shock_nondefault": 0.17,
+      "seed": 43,
+      "model": "behavioral XGBoost vanilla",
+      "roc_auc": 0.7329,
+      "pr_auc": 0.4140,
+      "test_rows": 60000,
+      "source": "xgboost_behavioural_results_p028_017_s43.json"
+    },
+    {
+      "run": "p030_015_s43",
+      "p_shock_default": 0.30,
+      "p_shock_nondefault": 0.15,
+      "seed": 43,
+      "model": "behavioral XGBoost vanilla",
+      "roc_auc": 0.7408,
+      "pr_auc": 0.4291,
+      "test_rows": 60000,
+      "source": "xgboost_behavioural_results_p030_015_s43.json"
+    },
+    {
+      "run": "main_subsample",
+      "p_shock_default": 0.35,
+      "p_shock_nondefault": 0.12,
+      "seed": 42,
+      "model": "behavioral XGBoost vanilla",
+      "roc_auc": 0.7625,
+      "pr_auc": 0.4781,
+      "test_rows": 60000,
+      "source": "xgboost_behavioural_results_subsample.json"
+    }
+  ]
+}

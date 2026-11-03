@@ -29,6 +29,8 @@ Requirements:
 
 import json
 import pickle
+import argparse
+import re
 from pathlib import Path
 
 import numpy as np
@@ -36,7 +38,8 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
-    confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score,
+    average_precision_score, confusion_matrix, f1_score, precision_score,
+    recall_score, roc_auc_score,
 )
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
@@ -168,6 +171,7 @@ def evaluate(y_true, y_pred, y_prob, label):
     return {
         "label":            label,
         "auc_roc":          round(float(roc_auc_score(y_true, y_prob)), 4),
+        "pr_auc":           round(float(average_precision_score(y_true, y_prob)), 4),
         "f1":               round(float(f1_score(y_true, y_pred, zero_division=0)), 4),
         "precision":        round(float(precision_score(y_true, y_pred, zero_division=0)), 4),
         "recall":           round(float(recall_score(y_true, y_pred, zero_division=0)), 4),
@@ -178,6 +182,31 @@ def evaluate(y_true, y_pred, y_prob, label):
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    parser = argparse.ArgumentParser(description="Train static + behavioural XGBoost")
+    parser.add_argument("--loan-ids-file", type=Path, default=None,
+                        help="Parquet file with fixed loan_id IDs and train/test membership")
+    parser.add_argument("--context-file", type=Path, default=None,
+                        help="Context parquet to use (defaults to the full or subset context file)")
+    parser.add_argument("--output-tag", type=str, default=None,
+                        help="Tag pipeline and results filenames, e.g. null")
+    parser.add_argument("--vanilla-only", action="store_true",
+                        help="Train only the vanilla model; skip scale_pos_weight comparison")
+    args = parser.parse_args()
+    output_tag = args.output_tag or ("subsample" if args.loan_ids_file else None)
+    if output_tag and not re.fullmatch(r"[A-Za-z0-9_-]+", output_tag):
+        raise ValueError("--output-tag may contain only letters, digits, '_' and '-'")
+    pipeline_out = ROOT / "src" / "models" / (
+        f"xgb_behavioural_pipeline_{output_tag}.pkl" if output_tag else PIPELINE_OUT.name
+    )
+    results_out = ROOT / "reports" / (
+        f"xgboost_behavioural_results_{output_tag}.json" if output_tag else RESULTS_OUT.name
+    )
+    default_context = (
+        f"sequence_context_features_{output_tag}.parquet"
+        if output_tag else CONTEXT_PATH.name
+    )
+    context_path = args.context_file or (ROOT / "data" / "processed" / default_context)
+
     print("=" * 64)
     print("XGBoost — Static + Behavioural Context Features")
     print("=" * 64)
@@ -189,7 +218,7 @@ def main():
 
     # ── Load behavioural context features ─────────────────────────────────────
     print("Loading behavioural context features...")
-    ctx = pd.read_parquet(CONTEXT_PATH)
+    ctx = pd.read_parquet(context_path)
     # loan_id may be index or column
     if "loan_id" not in ctx.columns:
         ctx = ctx.reset_index().rename(columns={"index": "loan_id"})
@@ -202,6 +231,23 @@ def main():
 
     # ── Merge static + behavioural ────────────────────────────────────────────
     merged = df.merge(ctx, on="loan_id", how="inner")
+    if args.loan_ids_file:
+        selected = pd.read_parquet(args.loan_ids_file)
+        if not {"loan_id", "split"}.issubset(selected.columns):
+            raise KeyError("--loan-ids-file must contain loan_id and split columns")
+        if selected["loan_id"].duplicated().any():
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        if set(selected["split"].unique()) - {"train", "test"}:
+            raise ValueError("split values in --loan-ids-file must be 'train' or 'test'")
+        split_by_id = dict(zip(selected["loan_id"].astype("int64"), selected["split"]))
+        merged = merged[merged["loan_id"].isin(split_by_id)].copy()
+        if len(merged) != len(selected):
+            raise ValueError("Not all requested IDs have both clean and context rows")
+        split_labels = merged["loan_id"].map(split_by_id)
+        if split_labels.isna().any():
+            raise ValueError("A selected loan_id has no train/test assignment")
+    else:
+        split_labels = None
     print(f"  merged shape: {merged.shape}  "
           f"(inner join — {len(df) - len(merged):,} borrowers dropped — no sequences)")
 
@@ -215,9 +261,17 @@ def main():
 
     # ── 70/30 split (same as Phase 2) ─────────────────────────────────────────
     print("Splitting 70/30 (stratified)...")
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.30, random_state=RANDOM_STATE, stratify=y
-    )
+    if split_labels is None:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.30, random_state=RANDOM_STATE, stratify=y
+        )
+    else:
+        train_mask = split_labels.to_numpy() == "train"
+        test_mask = split_labels.to_numpy() == "test"
+        if not train_mask.any() or not test_mask.any():
+            raise ValueError("Fixed-ID file must include both train and test borrowers")
+        X_train, X_test = X.iloc[train_mask], X.iloc[test_mask]
+        y_train, y_test = y.iloc[train_mask], y.iloc[test_mask]
     print(f"  train: {X_train.shape[0]:,}  test: {X_test.shape[0]:,}")
     print(f"  default rate — train: {y_train.mean():.2%}  test: {y_test.mean():.2%}")
 
@@ -234,46 +288,53 @@ def main():
     print(f"  AUC-ROC: {m['auc_roc']}  (static-only baseline: 0.7345)")
     print(f"  F1     : {m['f1']}")
 
-    # ── Train secondary (scale_pos_weight) ────────────────────────────────────
-    print("\n[2/2] Training XGBoost static+behavioural + scale_pos_weight...")
-    neg, pos   = (y_train == 0).sum(), (y_train == 1).sum()
-    spw_params = {**XGB_PARAMS, "scale_pos_weight": neg / pos}
-    pipeline_spw = Pipeline([
-        ("prep", build_preprocessor(X_train)),
-        ("clf",  XGBClassifier(**spw_params)),
-    ])
-    pipeline_spw.fit(X_train, y_train)
-    prob_s = pipeline_spw.predict_proba(X_test)[:, 1]
-    pred_s = (prob_s >= 0.5).astype(int)
-    m_s    = evaluate(y_test, pred_s, prob_s,
-                      "XGBoost static+behavioural + scale_pos_weight")
-    print(f"  AUC-ROC: {m_s['auc_roc']}")
+    m_s = None
+    if args.vanilla_only:
+        print("\nScale-pos-weight comparison skipped by --vanilla-only.")
+    else:
+        # ── Train secondary (scale_pos_weight) ───────────────────────────────
+        print("\n[2/2] Training XGBoost static+behavioural + scale_pos_weight...")
+        neg, pos   = (y_train == 0).sum(), (y_train == 1).sum()
+        spw_params = {**XGB_PARAMS, "scale_pos_weight": neg / pos}
+        pipeline_spw = Pipeline([
+            ("prep", build_preprocessor(X_train)),
+            ("clf",  XGBClassifier(**spw_params)),
+        ])
+        pipeline_spw.fit(X_train, y_train)
+        prob_s = pipeline_spw.predict_proba(X_test)[:, 1]
+        pred_s = (prob_s >= 0.5).astype(int)
+        m_s    = evaluate(y_test, pred_s, prob_s,
+                          "XGBoost static+behavioural + scale_pos_weight")
+        print(f"  AUC-ROC: {m_s['auc_roc']}")
 
     # ── Save pipeline (vanilla — used by shap_explainer.py) ───────────────────
-    with open(PIPELINE_OUT, "wb") as f:
+    with open(pipeline_out, "wb") as f:
         pickle.dump(pipeline, f)
-    print(f"\nPipeline saved -> {PIPELINE_OUT.relative_to(ROOT)}")
+    print(f"\nPipeline saved -> {pipeline_out.relative_to(ROOT)}")
 
     # ── Save results ──────────────────────────────────────────────────────────
     output = {
         "model":                   "XGBoost static+behavioural",
+        "train_rows":              int(len(y_train)),
+        "test_rows":               int(len(y_test)),
         "static_only_baseline_auc": 0.7345,
         "n_features":              X.shape[1],
         "n_static":                df.shape[1] - 2,
         "n_behavioural":           len(BEHAVIOURAL_COLS),
-        "results":                 [m, m_s],
+        "results":                 [m] if m_s is None else [m, m_s],
     }
-    RESULTS_OUT.parent.mkdir(parents=True, exist_ok=True)
-    with open(RESULTS_OUT, "w") as f:
+    results_out.parent.mkdir(parents=True, exist_ok=True)
+    with open(results_out, "w") as f:
         json.dump(output, f, indent=2)
-    print(f"Results saved -> {RESULTS_OUT.relative_to(ROOT)}")
+    print(f"Results saved -> {results_out.relative_to(ROOT)}")
 
     print("\n" + "=" * 64)
     print("COMPARISON TABLE")
     print("=" * 64)
     print(f"  Static-only XGBoost (Phase 2)       : AUC 0.7345")
     print(f"  Static+Behavioural XGBoost (vanilla): AUC {m['auc_roc']}")
-    print(f"  Static+Behavioural + pos_weight     : AUC {m_s['auc_roc']}")
+    if m_s is not None:
+        print(f"  Static+Behavioural + pos_weight     : AUC {m_s['auc_roc']}")
     print("=" * 64)
 
 

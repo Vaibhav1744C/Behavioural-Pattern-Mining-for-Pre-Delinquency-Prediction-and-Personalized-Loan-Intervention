@@ -33,6 +33,7 @@ Requirements:
 
 import json
 import pickle
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -347,12 +348,38 @@ def train_surrogate(X: pd.DataFrame, p: np.ndarray, label: str) -> dict:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    global CONTEXT_PATH, DENSE_PATH, INDEX_PATH, TRAIN_IDS_PATH
+    global BEHAVIOURAL_PKL, LSTM_CKPT, RULES_LSTM_OUT, RULES_XGB_OUT, FIDELITY_OUT
+    parser = argparse.ArgumentParser(description="Build fuzzy surrogate explanations")
+    parser.add_argument("--loan-ids-file", type=Path, default=None,
+                        help="Parquet file with fixed loan_id IDs and train/test membership")
+    parser.add_argument("--skip-lstm", action="store_true",
+                        help="Run only the XGBoost surrogate; skip all LSTM inference")
+    args = parser.parse_args()
+    if args.loan_ids_file:
+        CONTEXT_PATH = ROOT / "data" / "processed" / "sequence_context_features_subsample.parquet"
+        DENSE_PATH = ROOT / "data" / "processed" / "lstm_sequences_dense_subsample.npy"
+        INDEX_PATH = ROOT / "data" / "processed" / "lstm_loan_id_index_subsample.parquet"
+        TRAIN_IDS_PATH = ROOT / "data" / "processed" / "train_loan_ids_subsample.parquet"
+        BEHAVIOURAL_PKL = ROOT / "src" / "models" / "xgb_behavioural_pipeline_subsample.pkl"
+        LSTM_CKPT = ROOT / "src" / "models" / "lstm_best_subsample.pt"
+        RULES_LSTM_OUT = ROOT / "reports" / "surrogate_rules_lstm_subsample.json"
+        RULES_XGB_OUT = ROOT / "reports" / "surrogate_rules_xgb_behavioural_subsample.json"
+        FIDELITY_OUT = ROOT / "reports" / "surrogate_fidelity_subsample.json"
+
     print("=" * 64)
     print("Phase 6 — Fuzzy 2-tuple Surrogate Tree")
     print("=" * 64)
 
     # ── Get training loan_ids ─────────────────────────────────────────────────
-    if TRAIN_IDS_PATH.exists():
+    if args.loan_ids_file:
+        selected = pd.read_parquet(args.loan_ids_file)
+        if not {"loan_id", "split"}.issubset(selected.columns):
+            raise KeyError("--loan-ids-file must contain loan_id and split columns")
+        if selected["loan_id"].duplicated().any():
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        train_ids = selected.loc[selected["split"] == "train", "loan_id"].astype("int64").tolist()
+    elif TRAIN_IDS_PATH.exists():
         train_ids = pd.read_parquet(TRAIN_IDS_PATH)["loan_id"].tolist()
     else:
         print("  WARNING: train_loan_ids.parquet not found — using full dataset")
@@ -406,20 +433,23 @@ def main():
         print("  Run src/models/xgboost_behavioural.py first")
 
     # ── LSTM surrogate ────────────────────────────────────────────────────────
-    print("\n[2/2] LSTM surrogate...")
-    ctx_aligned = pd.read_parquet(CONTEXT_PATH)
-    if "loan_id" not in ctx_aligned.columns:
-        ctx_aligned = ctx_aligned.reset_index().rename(columns={"index": "loan_id"})
-    ctx_aligned = ctx_aligned[ctx_aligned["loan_id"].isin(set(aligned_ids.tolist()))]
+    if args.skip_lstm:
+        print("\nLSTM surrogate skipped by --skip-lstm.")
+    else:
+        print("\n[2/2] LSTM surrogate...")
+        ctx_aligned = pd.read_parquet(CONTEXT_PATH)
+        if "loan_id" not in ctx_aligned.columns:
+            ctx_aligned = ctx_aligned.reset_index().rename(columns={"index": "loan_id"})
+        ctx_aligned = ctx_aligned[ctx_aligned["loan_id"].isin(set(aligned_ids.tolist()))]
 
-    p_lstm = get_lstm_probs(aligned_ids, ctx_aligned)
-    if p_lstm is not None:
-        result_lstm = train_surrogate(X_sur[:len(p_lstm)], p_lstm, "LSTM")
-        fidelity_results["lstm"] = result_lstm["r2_fidelity"]
+        p_lstm = get_lstm_probs(aligned_ids, ctx_aligned)
+        if p_lstm is not None:
+            result_lstm = train_surrogate(X_sur[:len(p_lstm)], p_lstm, "LSTM")
+            fidelity_results["lstm"] = result_lstm["r2_fidelity"]
 
-        with open(RULES_LSTM_OUT, "w") as f:
-            json.dump(result_lstm, f, indent=2)
-        print(f"  Saved: {RULES_LSTM_OUT.relative_to(ROOT)}")
+            with open(RULES_LSTM_OUT, "w") as f:
+                json.dump(result_lstm, f, indent=2)
+            print(f"  Saved: {RULES_LSTM_OUT.relative_to(ROOT)}")
 
     # ── Save fidelity summary ─────────────────────────────────────────────────
     fidelity_results["paper_r2"] = 0.807   # midpoint of 0.806/0.808

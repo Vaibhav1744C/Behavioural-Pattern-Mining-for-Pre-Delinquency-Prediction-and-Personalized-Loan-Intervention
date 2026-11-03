@@ -24,6 +24,7 @@ Requirements:
 
 import json
 import pickle
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -32,6 +33,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
+import xgboost as xgb
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT            = Path(__file__).resolve().parents[2]
@@ -62,15 +64,30 @@ from baseline_xgboost import preprocess_features as preprocess_static
 
 # ── Helper: build aligned X_test for each model ───────────────────────────────
 
-def load_static_test():
+def load_fixed_test_ids(loan_ids_file: Path) -> set[int]:
+    selected = pd.read_parquet(loan_ids_file)
+    if not {"loan_id", "split"}.issubset(selected.columns):
+        raise KeyError("--loan-ids-file must contain loan_id and split columns")
+    if selected["loan_id"].duplicated().any():
+        raise ValueError("--loan-ids-file contains duplicate loan_id values")
+    return set(selected.loc[selected["split"] == "test", "loan_id"].astype("int64"))
+
+
+def load_static_test(loan_ids_file: Path | None = None):
     """Reproduce the static-only test set (same as Phase 2)."""
     df = pd.read_parquet(CLEAN_PATH)
     if "loan_id" not in df.columns:
         df = df.reset_index().rename(columns={"index": "loan_id"})
-    from sklearn.model_selection import train_test_split
-    _, test = train_test_split(
-        df, test_size=0.30, random_state=42, stratify=df["early_default"]
-    )
+    if loan_ids_file is None:
+        from sklearn.model_selection import train_test_split
+        _, test = train_test_split(
+            df, test_size=0.30, random_state=42, stratify=df["early_default"]
+        )
+    else:
+        ids = load_fixed_test_ids(loan_ids_file)
+        test = df[df["loan_id"].isin(ids)].copy()
+        if set(test["loan_id"].astype("int64")) != ids:
+            raise ValueError("One or more selected test IDs are absent from clean data")
     loan_ids = test["loan_id"].values
     y_test   = test["early_default"].astype("int8")
     X_test   = test.drop(columns=["early_default", "loan_id"])
@@ -78,21 +95,30 @@ def load_static_test():
     return X_test, y_test, loan_ids
 
 
-def load_behavioural_test():
+def load_behavioural_test(
+    loan_ids_file: Path | None = None,
+    context_path: Path = CONTEXT_PATH,
+):
     """Reproduce the static+behavioural test set."""
     df  = pd.read_parquet(CLEAN_PATH)
-    ctx = pd.read_parquet(CONTEXT_PATH)
+    ctx = pd.read_parquet(context_path)
     if "loan_id" not in df.columns:
         df = df.reset_index().rename(columns={"index": "loan_id"})
     if "loan_id" not in ctx.columns:
         ctx = ctx.reset_index().rename(columns={"index": "loan_id"})
     ctx   = ctx[["loan_id"] + BEHAVIOURAL_COLS]
     merged= df.merge(ctx, on="loan_id", how="inner")
-    from sklearn.model_selection import train_test_split
-    _, test = train_test_split(
-        merged, test_size=0.30, random_state=42,
-        stratify=merged["early_default"]
-    )
+    if loan_ids_file is None:
+        from sklearn.model_selection import train_test_split
+        _, test = train_test_split(
+            merged, test_size=0.30, random_state=42,
+            stratify=merged["early_default"]
+        )
+    else:
+        ids = load_fixed_test_ids(loan_ids_file)
+        test = merged[merged["loan_id"].isin(ids)].copy()
+        if set(test["loan_id"].astype("int64")) != ids:
+            raise ValueError("One or more selected test IDs are absent from clean/context data")
     loan_ids = test["loan_id"].values
     y_test   = test["early_default"].astype("int8")
     X_test   = test.drop(columns=["early_default", "loan_id"])
@@ -101,6 +127,42 @@ def load_behavioural_test():
 
 
 # ── Global SHAP ───────────────────────────────────────────────────────────────
+
+def shap_compatible_booster(clf):
+    """Normalize vector-form base_score only while SHAP decodes the booster.
+
+    XGBoost 3 serializes this scalar as a one-element vector string, while
+    SHAP's TreeExplainer loader calls float() on it. The shim changes only the
+    decoded metadata value, leaving the fitted booster and TreeExplainer method
+    untouched.
+    """
+    from shap.explainers import _tree
+    if not getattr(_tree, "_vector_base_score_compat", False):
+        original_decode = _tree.decode_ubjson_buffer
+
+        def decode_with_scalar_base_score(buffer):
+            model = original_decode(buffer)
+            params = model["learner"]["learner_model_param"]
+            value = params.get("base_score")
+            if isinstance(value, str) and value.startswith("["):
+                params["base_score"] = float(json.loads(value)[0])
+            return model
+
+        _tree.decode_ubjson_buffer = decode_with_scalar_base_score
+        _tree._vector_base_score_compat = True
+    return clf.get_booster()
+
+
+def verify_shap_additivity(pipeline, X_test: pd.DataFrame, n: int = 10) -> float:
+    """Check SHAP sum + expected value against raw margins on n rows."""
+    X_tr = pipeline.named_steps["prep"].transform(X_test.iloc[:n])
+    booster = shap_compatible_booster(pipeline.named_steps["clf"])
+    explainer = shap.TreeExplainer(booster)
+    values = np.asarray(explainer.shap_values(X_tr))
+    expected = np.asarray(explainer.expected_value).reshape(-1)
+    summed = values.sum(axis=1) + float(expected[0])
+    margins = booster.predict(xgb.DMatrix(X_tr), output_margin=True)
+    return float(np.max(np.abs(summed - margins)))
 
 def run_global_shap(pipeline, X_test: pd.DataFrame, title: str, out_path: Path,
                     max_display: int = 20, sample_n: int = 2000):
@@ -128,7 +190,7 @@ def run_global_shap(pipeline, X_test: pd.DataFrame, title: str, out_path: Path,
     else:
         X_s  = X_tr
 
-    explainer    = shap.TreeExplainer(clf)
+    explainer    = shap.TreeExplainer(shap_compatible_booster(clf))
     shap_values  = explainer.shap_values(X_s)
 
     plt.figure(figsize=(10, 8))
@@ -158,6 +220,7 @@ def run_local_shap(
     loan_ids_static: np.ndarray,
     loan_ids_behav:  np.ndarray,
     target_loan_ids: list,
+    metadata_by_id: dict | None = None,
 ) -> list:
     """
     Compute per-borrower SHAP values for target_loan_ids.
@@ -193,6 +256,7 @@ def run_local_shap(
             "loan_id":            int(lid),
             "top_static_shap":    top_static,
             "top_behavioural_shap": top_behav,
+            **(metadata_by_id or {}).get(int(lid), {}),
         })
 
     return records
@@ -201,12 +265,42 @@ def run_local_shap(
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    parser = argparse.ArgumentParser(description="Generate Phase 6 SHAP explanations")
+    parser.add_argument("--loan-ids-file", type=Path, default=None,
+                        help="Parquet file with fixed loan_id IDs and train/test membership")
+    parser.add_argument("--context-file", type=Path, default=None,
+                        help="Context parquet to use for the behavioural model")
+    args = parser.parse_args()
+    subset = args.loan_ids_file is not None
+    static_pkl = ROOT / "src" / "models" / (
+        "xgb_baseline_subsample_pipeline.pkl" if subset else STATIC_PKL.name
+    )
+    behavioural_pkl = ROOT / "src" / "models" / (
+        "xgb_behavioural_pipeline_subsample.pkl" if subset else BEHAVIOURAL_PKL.name
+    )
+    attention_path = ROOT / "reports" / (
+        "lstm_attention_samples_subsample.json" if subset else ATTN_PATH.name
+    )
+    context_path = args.context_file or (
+        ROOT / "data" / "processed" / "sequence_context_features_subsample.parquet"
+        if subset else CONTEXT_PATH
+    )
+    shap_static_png = ROOT / "reports" / (
+        "shap_summary_static_subsample.png" if subset else SHAP_STATIC_PNG.name
+    )
+    shap_behav_png = ROOT / "reports" / (
+        "shap_summary_behavioural_subsample.png" if subset else SHAP_BEHAV_PNG.name
+    )
+    shap_local_out = ROOT / "reports" / (
+        "shap_local_samples_subsample.json" if subset else SHAP_LOCAL_OUT.name
+    )
+
     print("=" * 64)
     print("Phase 6 — SHAP Explainer")
     print("=" * 64)
 
     # ── Load pipelines ────────────────────────────────────────────────────────
-    for path, name in [(STATIC_PKL, "static"), (BEHAVIOURAL_PKL, "behavioural")]:
+    for path, name in [(static_pkl, "static"), (behavioural_pkl, "behavioural")]:
         if not path.exists():
             raise FileNotFoundError(
                 f"{name} pipeline not found: {path}\n"
@@ -215,44 +309,58 @@ def main():
             )
 
     print("\nLoading pipelines...")
-    with open(STATIC_PKL,      "rb") as f: pipeline_static = pickle.load(f)
-    with open(BEHAVIOURAL_PKL, "rb") as f: pipeline_behav  = pickle.load(f)
+    with open(static_pkl,      "rb") as f: pipeline_static = pickle.load(f)
+    with open(behavioural_pkl, "rb") as f: pipeline_behav  = pickle.load(f)
 
     # ── Load test sets ────────────────────────────────────────────────────────
     print("Loading test sets...")
-    X_test_s, y_s, ids_s = load_static_test()
-    X_test_b, y_b, ids_b = load_behavioural_test()
+    X_test_s, y_s, ids_s = load_static_test(args.loan_ids_file)
+    X_test_b, y_b, ids_b = load_behavioural_test(args.loan_ids_file, context_path)
     print(f"  Static test   : {X_test_s.shape}")
     print(f"  Behavioural test: {X_test_b.shape}")
+    static_error = verify_shap_additivity(pipeline_static, X_test_s, n=10)
+    behavioural_error = verify_shap_additivity(pipeline_behav, X_test_b, n=10)
+    print("  SHAP additivity max abs error (10 borrowers): "
+          f"static={static_error:.3e}, behavioural={behavioural_error:.3e}")
 
     # ── Global SHAP plots ─────────────────────────────────────────────────────
     print("\n[1/2] Global SHAP...")
     run_global_shap(pipeline_static, X_test_s,
-                    "SHAP — Static-only XGBoost", SHAP_STATIC_PNG)
+                    "SHAP — Static-only XGBoost", shap_static_png)
     run_global_shap(pipeline_behav,  X_test_b,
-                    "SHAP — Static+Behavioural XGBoost", SHAP_BEHAV_PNG)
+                    "SHAP — Static+Behavioural XGBoost", shap_behav_png)
 
     # ── Local SHAP for same 50 borrowers as LSTM attention ────────────────────
     print("\n[2/2] Local SHAP (50 borrowers)...")
-    if not ATTN_PATH.exists():
-        print(f"  WARNING: {ATTN_PATH.name} not found — skipping local SHAP")
-        print("  Run lstm_model.py first to generate attention samples")
-        local_records = []
-    else:
-        with open(ATTN_PATH) as f:
+    if attention_path.exists():
+        with open(attention_path) as f:
             attn_samples = json.load(f)
         target_ids = [s["loan_id"] for s in attn_samples]
-        local_records = run_local_shap(
-            pipeline_static, pipeline_behav,
-            X_test_s, X_test_b,
-            ids_s, ids_b,
-            target_ids,
-        )
+    else:
+        # Fixed, reproducible local-explanation sample when LSTM attention is absent.
+        target_ids = [int(v) for v in ids_b[:50]]
+        print(f"  No attention file; using first {len(target_ids)} fixed test IDs for local SHAP")
+    p_behav = pipeline_behav.predict_proba(X_test_b)[:, 1]
+    metadata_by_id = {
+        int(lid): {
+            "true_label": int(label),
+            "predicted_prob": float(prob),
+            "predicted_correct": bool((prob >= 0.5) == int(label)),
+        }
+        for lid, label, prob in zip(ids_b, y_b, p_behav)
+    }
+    local_records = run_local_shap(
+        pipeline_static, pipeline_behav,
+        X_test_s, X_test_b,
+        ids_s, ids_b,
+        target_ids,
+        metadata_by_id,
+    )
 
-    SHAP_LOCAL_OUT.parent.mkdir(parents=True, exist_ok=True)
-    with open(SHAP_LOCAL_OUT, "w") as f:
+    shap_local_out.parent.mkdir(parents=True, exist_ok=True)
+    with open(shap_local_out, "w") as f:
         json.dump(local_records, f, indent=2)
-    print(f"  Saved: {SHAP_LOCAL_OUT.relative_to(ROOT)}")
+    print(f"  Saved: {shap_local_out.relative_to(ROOT)}")
 
     print("\n" + "=" * 64)
     print("Phase 6 SHAP complete.")

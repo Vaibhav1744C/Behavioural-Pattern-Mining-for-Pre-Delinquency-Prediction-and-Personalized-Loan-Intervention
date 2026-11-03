@@ -36,6 +36,7 @@ Requirements:
 """
 
 import json
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -199,15 +200,30 @@ def lookup_fuzzy_risk(loan_id: int, rules: list, X_row: dict | None) -> str:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
+    global ATTN_PATH, SHAP_PATH, RULES_PATH, SEQ_PATH, CONTEXT_PATH, OUTPUT_PATH
+    parser = argparse.ArgumentParser(description="Build unified borrower explanations")
+    parser.add_argument("--loan-ids-file", type=Path, default=None,
+                        help="Parquet file with fixed loan_id IDs and train/test membership")
+    parser.add_argument("--without-attention", action="store_true",
+                        help="Build explanations from local SHAP and fuzzy risk only")
+    args = parser.parse_args()
+    if args.loan_ids_file:
+        ATTN_PATH = ROOT / "reports" / "lstm_attention_samples_subsample.json"
+        SHAP_PATH = ROOT / "reports" / "shap_local_samples_subsample.json"
+        RULES_PATH = ROOT / "reports" / "surrogate_rules_xgb_behavioural_subsample.json"
+        SEQ_PATH = ROOT / "data" / "synthetic" / "behavioural_sequences_subsample.parquet"
+        CONTEXT_PATH = ROOT / "data" / "processed" / "sequence_context_features_subsample.parquet"
+        OUTPUT_PATH = ROOT / "reports" / "unified_explanations_subsample.json"
+
     print("=" * 64)
     print("Phase 6 — Unified Explanation Engine")
     print("=" * 64)
 
     # ── Load inputs ───────────────────────────────────────────────────────────
-    for path, name in [
-        (ATTN_PATH,  "lstm_attention_samples.json"),
-        (SHAP_PATH,  "shap_local_samples.json"),
-    ]:
+    required_paths = [(SHAP_PATH, "shap_local_samples.json")]
+    if not args.without_attention:
+        required_paths.insert(0, (ATTN_PATH, "lstm_attention_samples.json"))
+    for path, name in required_paths:
         if not path.exists():
             raise FileNotFoundError(
                 f"{name} not found at {path}\n"
@@ -215,8 +231,28 @@ def main():
             )
 
     print("Loading explanation inputs...")
-    with open(ATTN_PATH) as f: attn_samples = json.load(f)
     with open(SHAP_PATH) as f: shap_samples = json.load(f)
+    if args.without_attention:
+        attn_samples = shap_samples
+    else:
+        with open(ATTN_PATH) as f: attn_samples = json.load(f)
+
+    if args.loan_ids_file:
+        selected = pd.read_parquet(args.loan_ids_file)
+        if not {"loan_id", "split"}.issubset(selected.columns):
+            raise KeyError("--loan-ids-file must contain loan_id and split columns")
+        selected_test_ids = set(
+            selected.loc[selected["split"] == "test", "loan_id"].astype("int64")
+        )
+        invalid_sample_ids = {
+            int(sample["loan_id"]) for sample in attn_samples
+        } - selected_test_ids
+        if invalid_sample_ids:
+            raise ValueError("Attention samples contain IDs outside the selected test set")
+        shap_samples = [
+            sample for sample in shap_samples
+            if int(sample["loan_id"]) in selected_test_ids
+        ]
 
     # Load fuzzy rules (optional — use if available)
     fuzzy_rules = []
@@ -231,24 +267,25 @@ def main():
     # Build lookup maps
     shap_by_id = {s["loan_id"]: s for s in shap_samples}
 
-    # Load raw sequences for narrative (stream only needed columns)
-    print("Loading raw sequences for narrative generation...")
-    seq_cols = ["loan_id", "month", "salary_delay_days", "discretionary_spend",
-                "account_balance", "savings_balance", "emi_status"]
-    target_ids = set(s["loan_id"] for s in attn_samples)
-
-    import pyarrow.parquet as pq
-    pf = pq.ParquetFile(SEQ_PATH)
-    seq_pieces = []
-    for batch in pf.iter_batches(batch_size=1_000_000, columns=seq_cols):
-        df_b = batch.to_pandas()
-        df_b = df_b[df_b["loan_id"].isin(target_ids)]
-        if not df_b.empty:
-            seq_pieces.append(df_b)
-        if len(seq_pieces) > 0 and sum(len(p) for p in seq_pieces) >= len(target_ids) * 24:
-            break
-    seq_df = pd.concat(seq_pieces, ignore_index=True) if seq_pieces else pd.DataFrame()
-    print(f"  Loaded {len(seq_df):,} sequence rows for {seq_df['loan_id'].nunique() if not seq_df.empty else 0} borrowers")
+    seq_df = pd.DataFrame()
+    if not args.without_attention:
+        # Load only sampled raw sequences; never materialize the full sequence parquet.
+        print("Loading raw sequences for narrative generation...")
+        seq_cols = ["loan_id", "month", "salary_delay_days", "discretionary_spend",
+                    "account_balance", "savings_balance", "emi_status"]
+        target_ids = set(int(s["loan_id"]) for s in attn_samples)
+        import pyarrow.parquet as pq
+        pf = pq.ParquetFile(SEQ_PATH)
+        seq_pieces = []
+        for batch in pf.iter_batches(batch_size=1_000_000, columns=seq_cols):
+            df_b = batch.to_pandas()
+            df_b = df_b[df_b["loan_id"].isin(target_ids)]
+            if not df_b.empty:
+                seq_pieces.append(df_b)
+            if len(seq_pieces) > 0 and sum(len(p) for p in seq_pieces) >= len(target_ids) * 24:
+                break
+        seq_df = pd.concat(seq_pieces, ignore_index=True) if seq_pieces else pd.DataFrame()
+        print(f"  Loaded {len(seq_df):,} sequence rows for {seq_df['loan_id'].nunique() if not seq_df.empty else 0} borrowers")
 
     # ── Build unified explanation per borrower ────────────────────────────────
     print(f"\nBuilding unified explanations for {len(attn_samples)} borrowers...")
@@ -256,11 +293,11 @@ def main():
 
     for sample in attn_samples:
         lid      = sample["loan_id"]
-        attn_w   = sample["attn_weights"]
-        seq_len  = sample["seq_len"]
-        pred_prob= sample["pred_prob"]
+        attn_w   = sample.get("attn_weights", [])
+        seq_len  = sample.get("seq_len", 0)
+        pred_prob= sample.get("pred_prob", sample.get("predicted_prob"))
         true_lbl = sample["true_label"]
-        correct  = sample["correct"]
+        correct  = sample.get("correct", sample.get("predicted_correct"))
 
         # SHAP
         shap_rec = shap_by_id.get(lid, {})
@@ -274,11 +311,14 @@ def main():
         risk_linguistic = f"({risk_label}, {risk_delta:+.4f})"
 
         # Narrative
-        raw_vals = get_raw_values_for_months(lid, list(range(seq_len)), seq_df)
-        baseline = get_borrower_baseline(lid, seq_df)
-        top_months, narrative = build_narrative(lid, attn_w, seq_len, raw_vals, baseline)
+        if args.without_attention:
+            top_months, narrative = [], ""
+        else:
+            raw_vals = get_raw_values_for_months(lid, list(range(seq_len)), seq_df)
+            baseline = get_borrower_baseline(lid, seq_df)
+            top_months, narrative = build_narrative(lid, attn_w, seq_len, raw_vals, baseline)
 
-        explanations.append({
+        explanation = {
             "loan_id":                  lid,
             "true_label":               true_lbl,
             "predicted_prob":           pred_prob,
@@ -286,9 +326,11 @@ def main():
             "predicted_risk_linguistic":risk_linguistic,
             "top_static_drivers":       top_static,
             "top_behavioural_drivers":  top_behav,
-            "attention_focus_months":   top_months,
-            "attention_narrative":      narrative,
-        })
+        }
+        if not args.without_attention:
+            explanation["attention_focus_months"] = top_months
+            explanation["attention_narrative"] = narrative
+        explanations.append(explanation)
 
     # ── Save ──────────────────────────────────────────────────────────────────
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -311,8 +353,9 @@ def main():
         if ex["top_behavioural_drivers"]:
             print(f"  Top behav. driver : {ex['top_behavioural_drivers'][0]['feature']} "
                   f"(SHAP={ex['top_behavioural_drivers'][0]['shap_value']})")
-        print(f"  Attention months  : {ex['attention_focus_months']}")
-        print(f"  Narrative         : {ex['attention_narrative']}")
+        if not args.without_attention:
+            print(f"  Attention months  : {ex['attention_focus_months']}")
+            print(f"  Narrative         : {ex['attention_narrative']}")
 
     print("\n" + "=" * 64)
     print("Phase 6 Unified Explanation complete.")

@@ -1,0 +1,29 @@
+{
+  "model": "XGBoost static+behavioural",
+  "train_rows": 140000,
+  "test_rows": 60000,
+  "static_only_baseline_auc": 0.7345,
+  "n_features": 76,
+  "n_static": 70,
+  "n_behavioural": 7,
+  "results": [
+    {
+      "label": "XGBoost static+behavioural (vanilla)",
+      "auc_roc": 0.7329,
+      "pr_auc": 0.414,
+      "f1": 0.1979,
+      "precision": 0.5832,
+      "recall": 0.1192,
+      "confusion_matrix": [
+        [
+          46853,
+          1032
+        ],
+        [
+          10671,
+          1444
+        ]
+      ]
+    }
+  ]
+}

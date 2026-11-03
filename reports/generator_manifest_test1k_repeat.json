@@ -1,0 +1,16 @@
+{
+  "alpha": 0.6,
+  "p_shock_default": 0.35,
+  "p_shock_nondefault": 0.12,
+  "n_borrowers": 1000,
+  "max_sequence_length": 24,
+  "chunk_size": 50000,
+  "random_seed": 42,
+  "rng_seed_strategy": "SeedSequence([random_seed, loan_id])",
+  "output_tag": "test1k_repeat",
+  "loan_ids_file": "data\\processed\\test1k_loan_ids.parquet",
+  "ablation_skipped": true,
+  "main_run_rows": 24000,
+  "ablation_run_rows": null,
+  "generated_at": "2026-11-03T15:29:17.359483Z"
+}

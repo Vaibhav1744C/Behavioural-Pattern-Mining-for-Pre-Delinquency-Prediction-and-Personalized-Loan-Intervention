@@ -345,6 +345,8 @@ def parse_args():
                    help="Path to behavioural sequences parquet (default: data/synthetic/behavioural_sequences.parquet)")
     p.add_argument("--sample",      type=int, default=None,
                    help="Only process N borrowers (for testing)")
+    p.add_argument("--loan-ids-file", type=str, default=None,
+                   help="Parquet file with the fixed loan_id set to process")
     p.add_argument("--chunk-size",  type=int, default=50_000,
                    help="Borrowers per chunk for chunked parquet write")
     return p.parse_args()
@@ -352,6 +354,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.sample and args.loan_ids_file:
+        raise ValueError("Use either --sample or --loan-ids-file, not both")
 
     print("=" * 64)
     print("Phase 4 — Feature Engineering")
@@ -425,7 +429,21 @@ def main():
     n_borrowers = len(all_ids)
     print(f"  Borrowers: {n_borrowers:,}")
 
-    if args.sample and not args.seq_parquet:
+    if args.loan_ids_file:
+        requested = pd.read_parquet(args.loan_ids_file)
+        if "loan_id" not in requested.columns:
+            raise KeyError(f"{args.loan_ids_file} has no loan_id column")
+        requested_ids = requested["loan_id"].astype("int64").tolist()
+        if len(requested_ids) != len(set(requested_ids)):
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        sequence_id_set = set(int(lid) for lid in all_ids)
+        missing_ids = set(requested_ids) - sequence_id_set
+        if missing_ids:
+            raise ValueError(f"{len(missing_ids):,} requested loan_ids are absent from {seq_path}")
+        all_ids = np.asarray(requested_ids, dtype="int64")
+        n_borrowers = len(all_ids)
+        print(f"  Fixed borrower IDs: {n_borrowers:,} from {args.loan_ids_file}")
+    elif args.sample and not args.seq_parquet:
         all_ids = all_ids[:args.sample]
         n_borrowers = len(all_ids)
         print(f"  Subsetting to {n_borrowers:,} borrowers")

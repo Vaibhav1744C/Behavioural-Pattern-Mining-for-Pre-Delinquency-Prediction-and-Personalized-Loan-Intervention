@@ -212,7 +212,13 @@ class LSTMPredictor(nn.Module):
 
 # ── Data loading ──────────────────────────────────────────────────────────────
 
-def load_all_data(dense_path: Path, sample_n: int | None = None):
+def load_all_data(
+    dense_path: Path,
+    sample_n: int | None = None,
+    loan_ids_file: Path | None = None,
+    index_path: Path = INDEX_PATH,
+    context_path: Path = CONTEXT_PATH,
+):
     """
     Load everything into RAM once. Returns aligned arrays for all borrowers.
     """
@@ -221,11 +227,11 @@ def load_all_data(dense_path: Path, sample_n: int | None = None):
     print(f"  seq_arr shape : {seq_arr.shape}")
 
     print("Loading loan_id index...")
-    idx_df  = pd.read_parquet(INDEX_PATH)      # loan_id, row_index
+    idx_df  = pd.read_parquet(index_path)      # loan_id, row_index
     id_to_row = dict(zip(idx_df["loan_id"], idx_df["row_index"]))
 
     print("Loading context features...")
-    ctx_df  = pd.read_parquet(CONTEXT_PATH)
+    ctx_df  = pd.read_parquet(context_path)
     # Ensure seq_len is present for masking but not in model input
     assert "seq_len" in ctx_df.columns, "seq_len missing from context features"
     seq_lens_map = dict(zip(ctx_df["loan_id"], ctx_df["seq_len"]))
@@ -249,7 +255,18 @@ def load_all_data(dense_path: Path, sample_n: int | None = None):
     ctx_ids = set(ctx_df["loan_id"].tolist())
     all_ids = [lid for lid in all_ids if lid in ctx_ids and lid in label_map]
 
-    if sample_n:
+    if loan_ids_file is not None:
+        selected = pd.read_parquet(loan_ids_file)
+        if not {"loan_id", "split"}.issubset(selected.columns):
+            raise KeyError("--loan-ids-file must contain loan_id and split columns")
+        requested_ids = selected["loan_id"].astype("int64").tolist()
+        if len(requested_ids) != len(set(requested_ids)):
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        missing_ids = set(requested_ids) - set(all_ids)
+        if missing_ids:
+            raise ValueError(f"{len(missing_ids):,} fixed IDs are absent from dense/context data")
+        all_ids = requested_ids
+    elif sample_n:
         all_ids = all_ids[:sample_n]
         print(f"  Subsetting to {len(all_ids):,} borrowers (--sample)")
 
@@ -273,11 +290,29 @@ def load_all_data(dense_path: Path, sample_n: int | None = None):
     return seq_out, ctx_out, labels, seq_lens, loan_ids, all_ids
 
 
-def split_indices(all_ids: list, loan_ids_arr: np.ndarray) -> tuple:
+def split_indices(
+    all_ids: list,
+    loan_ids_arr: np.ndarray,
+    loan_ids_file: Path | None = None,
+) -> tuple:
     """
     Split into train+val / test using the same loan_ids as Phase 2.
     Returns (train_val_mask, test_mask) boolean arrays over loan_ids_arr.
     """
+    if loan_ids_file is not None:
+        selected = pd.read_parquet(loan_ids_file)
+        if not {"loan_id", "split"}.issubset(selected.columns):
+            raise KeyError("--loan-ids-file must contain loan_id and split columns")
+        if selected["loan_id"].duplicated().any():
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        split_by_id = dict(zip(selected["loan_id"].astype("int64"), selected["split"]))
+        if set(split_by_id) != set(int(lid) for lid in loan_ids_arr):
+            raise ValueError("Loaded LSTM IDs do not exactly match --loan-ids-file")
+        if set(split_by_id.values()) - {"train", "test"}:
+            raise ValueError("split values in --loan-ids-file must be 'train' or 'test'")
+        train_val_mask = np.array([split_by_id[int(lid)] == "train" for lid in loan_ids_arr])
+        return train_val_mask, ~train_val_mask
+
     if TRAIN_IDS_PATH.exists():
         train_ids = set(pd.read_parquet(TRAIN_IDS_PATH)["loan_id"].tolist())
     else:
@@ -395,6 +430,8 @@ def parse_args():
     p.add_argument("--hidden-size",    type=int, default=64)
     p.add_argument("--sample",         type=int, default=None,
                    help="Train on N borrowers only (quick smoke test)")
+    p.add_argument("--loan-ids-file",  type=Path, default=None,
+                   help="Parquet file with fixed loan_id IDs and train/test membership")
     p.add_argument("--pos-weight",     action="store_true",
                    help="Use pos_weight in BCEWithLogitsLoss (secondary comparison)")
     p.add_argument("--eval-only",      action="store_true",
@@ -404,6 +441,8 @@ def parse_args():
 
 def main():
     args    = parse_args()
+    if args.sample and args.loan_ids_file:
+        raise ValueError("Use either --sample or --loan-ids-file, not both")
     device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("=" * 64)
     print("Phase 5 — LSTM Temporal Model Training")
@@ -411,8 +450,18 @@ def main():
     print("=" * 64)
 
     # ── Resolve paths ─────────────────────────────────────────────────────────
-    dense_path   = ROOT / "data" / "processed" / (args.sequences_file or "lstm_sequences_dense.npy")
-    results_path = ROOT / "reports" / args.results_file
+    subsample_tag = args.loan_ids_file is not None
+    default_dense = "lstm_sequences_dense_subsample.npy" if subsample_tag else "lstm_sequences_dense.npy"
+    default_results = "lstm_results_subsample.json" if subsample_tag else "lstm_results.json"
+    dense_path = ROOT / "data" / "processed" / (args.sequences_file or default_dense)
+    results_name = args.results_file
+    if subsample_tag and results_name == "lstm_results.json":
+        results_name = default_results
+    results_path = ROOT / "reports" / results_name
+    checkpoint_path = ROOT / "src" / "models" / ("lstm_best_subsample.pt" if subsample_tag else CHECKPOINT_OUT.name)
+    attention_path = ROOT / "reports" / ("lstm_attention_samples_subsample.json" if subsample_tag else ATTN_OUT.name)
+    index_path = ROOT / "data" / "processed" / ("lstm_loan_id_index_subsample.parquet" if subsample_tag else INDEX_PATH.name)
+    context_path = ROOT / "data" / "processed" / ("sequence_context_features_subsample.parquet" if subsample_tag else CONTEXT_PATH.name)
 
     if not dense_path.exists():
         raise FileNotFoundError(
@@ -422,12 +471,16 @@ def main():
 
     # ── Load data ─────────────────────────────────────────────────────────────
     seq_arr, ctx_arr, labels, seq_lens, loan_ids, all_ids = load_all_data(
-        dense_path, sample_n=args.sample
+        dense_path,
+        sample_n=args.sample,
+        loan_ids_file=args.loan_ids_file,
+        index_path=index_path,
+        context_path=context_path,
     )
 
     # ── Split ─────────────────────────────────────────────────────────────────
     print("\nSplitting train+val / test...")
-    tv_mask, test_mask = split_indices(all_ids, loan_ids)
+    tv_mask, test_mask = split_indices(all_ids, loan_ids, args.loan_ids_file)
 
     # Internal 90/10 val split within train
     tv_indices  = np.where(tv_mask)[0]
@@ -473,8 +526,8 @@ def main():
     # ── Training loop (skip if --eval-only) ──────────────────────────────────
     if args.eval_only:
         print("\n--eval-only flag set. Loading checkpoint directly...")
-        if not CHECKPOINT_OUT.exists():
-            raise FileNotFoundError(f"No checkpoint at {CHECKPOINT_OUT}. Run training first.")
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"No checkpoint at {checkpoint_path}. Run training first.")
         best_val_auc = 0.0
         history      = []
     else:
@@ -501,7 +554,7 @@ def main():
             if val_auc > best_val_auc:
                 best_val_auc  = val_auc
                 patience_left = 5
-                torch.save(model.state_dict(), CHECKPOINT_OUT)
+                torch.save(model.state_dict(), checkpoint_path)
                 print(f"    --> New best val AUC: {best_val_auc:.4f}  (checkpoint saved)")
             else:
                 patience_left -= 1
@@ -511,7 +564,7 @@ def main():
 
     # ── Test evaluation ───────────────────────────────────────────────────────
     print(f"\nLoading best checkpoint (val AUC={best_val_auc:.4f})...")
-    model.load_state_dict(torch.load(CHECKPOINT_OUT, map_location=device))
+    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
 
     _, test_auc, test_probs, test_labels = evaluate(model, test_loader, criterion, device)
     test_preds = (test_probs >= 0.5).astype(int)
@@ -551,9 +604,9 @@ def main():
     # ── Attention samples ─────────────────────────────────────────────────────
     print("Collecting attention samples for Phase 6...")
     attn_samples = collect_attention_samples(model, test_loader, device, n_samples=50)
-    with open(ATTN_OUT, "w") as f:
+    with open(attention_path, "w") as f:
         json.dump(attn_samples, f, indent=2)
-    print(f"Attention samples -> {ATTN_OUT.relative_to(ROOT)}")
+    print(f"Attention samples -> {attention_path.relative_to(ROOT)}")
     print(f"\nDone. Best test AUC: {test_auc:.4f}")
 
 

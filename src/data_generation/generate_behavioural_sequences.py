@@ -38,6 +38,7 @@ Requirements:
 import argparse
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -121,7 +122,7 @@ def build_shock_stress(
     n_borrowers: int,
     seq_lengths: np.ndarray,
     p_shock: np.ndarray,
-    rng: np.random.Generator,
+    rng: np.random.Generator | list[np.random.Generator],
     max_seq_len: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -132,9 +133,13 @@ def build_shock_stress(
     from the draw rather than inferring from peak stress thresholds.
     """
     shock_stress = np.zeros((n_borrowers, max_seq_len), dtype=np.float32)
-    has_shock    = rng.random(n_borrowers) < p_shock
+    rngs = rng if isinstance(rng, list) else [rng] * n_borrowers
+    if len(rngs) != n_borrowers:
+        raise ValueError("Expected one RNG per borrower")
+    has_shock = np.array([rng_i.random() < p_shock[i] for i, rng_i in enumerate(rngs)])
 
     for i in range(n_borrowers):
+        rng_i = rngs[i]
         L = int(seq_lengths[i])
         if L == 0:
             continue
@@ -142,9 +147,9 @@ def build_shock_stress(
         # AR(1) baseline noise (no shock) — allow small negative values so
         # low-stress borrowers still show trajectory variation after rounding
         noise = np.zeros(L, dtype=np.float32)
-        noise[0] = float(rng.normal(0, 0.03))
+        noise[0] = float(rng_i.normal(0, 0.03))
         for t in range(1, L):
-            noise[t] = AR1_PHI * noise[t - 1] + float(rng.normal(0, 0.03))
+            noise[t] = AR1_PHI * noise[t - 1] + float(rng_i.normal(0, 0.03))
         # Clip to [-0.05, 0.15] — allow slight negative variation
         noise = np.clip(noise, -0.05, 0.15)
 
@@ -155,11 +160,11 @@ def build_shock_stress(
             weights   = np.ones(L, dtype=float)
             weights[mid_start:mid_end] *= 3.0
             weights   /= weights.sum()
-            onset     = rng.choice(L, p=weights)
+            onset     = rng_i.choice(L, p=weights)
 
             # Ramp over 2-3 months, hold elevated
-            ramp_len  = rng.integers(2, 4)
-            peak      = float(rng.uniform(0.55, 0.90))
+            ramp_len  = rng_i.integers(2, 4)
+            peak      = float(rng_i.uniform(0.55, 0.90))
             for t in range(L):
                 if t < onset:
                     noise[t] = max(noise[t], 0)
@@ -167,7 +172,7 @@ def build_shock_stress(
                     frac = (t - onset + 1) / ramp_len
                     noise[t] = frac * peak
                 else:
-                    jitter = rng.normal(0, 0.04)
+                    jitter = rng_i.normal(0, 0.04)
                     noise[t] = np.clip(peak + jitter, 0.3, 1.0)
 
         shock_stress[i, :L] = noise
@@ -184,7 +189,7 @@ def generate_sequences_for_chunk(
     p_shock_nondefault: float,
     max_seq_len: int,
     max_delay_days: int,
-    rng: np.random.Generator,
+    rng: np.random.Generator | list[np.random.Generator],
     return_shock_flags: bool = False,
 ) -> pd.DataFrame | tuple:
     """
@@ -192,6 +197,9 @@ def generate_sequences_for_chunk(
     Returns a long-format DataFrame with one row per (loan_id, month).
     """
     n = len(chunk)
+    rngs = rng if isinstance(rng, list) else [rng] * n
+    if len(rngs) != n:
+        raise ValueError("Expected one RNG per borrower")
     loan_ids   = chunk["loan_id"].values
     annual_inc = pd.to_numeric(chunk["annual_inc"], errors="coerce").fillna(30000).values.astype(float)
     term_months= pd.to_numeric(chunk["term"],       errors="coerce").fillna(36).values.astype(float)
@@ -207,14 +215,17 @@ def generate_sequences_for_chunk(
     p_shock = _draw_shock_probability(labels, p_shock_default, p_shock_nondefault)
 
     # Shock stress (n, max_seq_len) + shock flags for validation
-    shock_arr, has_shock = build_shock_stress(n, seq_lengths, p_shock, rng, max_seq_len)
+    shock_arr, has_shock = build_shock_stress(n, seq_lengths, p_shock, rngs, max_seq_len)
 
     # Savings starting balance: 1-3 months of income, random per borrower
-    savings_start = monthly_inc * rng.uniform(1.0, 3.0, size=n)
+    savings_start = monthly_inc * np.array(
+        [rng_i.uniform(1.0, 3.0) for rng_i in rngs], dtype=float
+    )
 
     # Build long-format rows
     rows = []
     for i in range(n):
+        rng_i = rngs[i]
         L        = int(seq_lengths[i])
         inc      = monthly_inc[i]
         ss       = static_stress[i]
@@ -226,13 +237,13 @@ def generate_sequences_for_chunk(
 
         # --- salary_credit: AR(1) noise ~5% of mean, independent of stress ---
         sal_noise = np.zeros(L, dtype=float)
-        sal_noise[0] = rng.normal(0, 0.05 * inc)
+        sal_noise[0] = rng_i.normal(0, 0.05 * inc)
         for t in range(1, L):
-            sal_noise[t] = AR1_PHI * sal_noise[t - 1] + rng.normal(0, 0.05 * inc)
+            sal_noise[t] = AR1_PHI * sal_noise[t - 1] + rng_i.normal(0, 0.05 * inc)
         salary_credit = np.clip(inc + sal_noise, 0.1 * inc, 5.0 * inc)
 
         # --- salary_delay_days: rises with stress ---
-        delay_noise = rng.normal(0, 0.5, size=L)
+        delay_noise = rng_i.normal(0, 0.5, size=L)
         salary_delay = np.clip(
             stress * max_delay_days + delay_noise, 0, max_delay_days
         ).astype(int)
@@ -247,18 +258,18 @@ def generate_sequences_for_chunk(
                 1.0 + 0.30 * max(delta_recent, 0) - 0.40 * stress[t]
             )
         spend_noise = np.zeros(L, dtype=float)
-        spend_noise[0] = rng.normal(0, 0.04 * base_spend)
+        spend_noise[0] = rng_i.normal(0, 0.04 * base_spend)
         for t in range(1, L):
-            spend_noise[t] = AR1_PHI * spend_noise[t - 1] + rng.normal(0, 0.04 * base_spend)
+            spend_noise[t] = AR1_PHI * spend_noise[t - 1] + rng_i.normal(0, 0.04 * base_spend)
         discretionary_spend = np.clip(spend_arr + spend_noise, 0.05 * inc, 2.0 * inc)
 
         # --- account_balance: cumulative running balance ---
         emi = 0.10 * inc   # simplified EMI proxy
         balance = np.zeros(L, dtype=float)
-        balance[0] = inc * rng.uniform(0.5, 2.0)   # random starting balance
+        balance[0] = inc * rng_i.uniform(0.5, 2.0)   # random starting balance
         for t in range(1, L):
-            emi_paid = emi if rng.random() > stress[t] else 0.0
-            b_noise  = AR1_PHI * rng.normal(0, 0.02 * inc)
+            emi_paid = emi if rng_i.random() > stress[t] else 0.0
+            b_noise  = AR1_PHI * rng_i.normal(0, 0.02 * inc)
             balance[t] = balance[t-1] + salary_credit[t] - discretionary_spend[t] - emi_paid + b_noise
 
         # --- savings_balance: slow decline under stress, stable otherwise ---
@@ -267,7 +278,7 @@ def generate_sequences_for_chunk(
         for t in range(1, L):
             draw = savings[t-1] * 0.03 * stress[t]    # monthly drawdown
             grow = savings[t-1] * 0.005 * (1 - stress[t])  # slow growth when calm
-            s_noise = rng.normal(0, 0.01 * savings_start[i])
+            s_noise = rng_i.normal(0, 0.01 * savings_start[i])
             savings[t] = max(0.0, savings[t-1] - draw + grow + s_noise)
 
         # --- emi_status: logistic fn of stress ---
@@ -277,7 +288,7 @@ def generate_sequences_for_chunk(
         p_ontime  = np.clip(1.0 - p_missed - p_delayed, 0, 1)
 
         for t in range(L):
-            draw_val = rng.random()
+            draw_val = rng_i.random()
             if draw_val < p_missed[t]:
                 emi_status = "missed"
             elif draw_val < p_missed[t] + p_delayed[t]:
@@ -320,6 +331,7 @@ def run_validation(
     max_delay_days: int,
     rng: np.random.Generator,
     n_sample: int = 2000,
+    plots_dir: Path = PLOTS_DIR,
 ) -> None:
     """
     Run on a small sample, assert sanity checks, and save validation plots.
@@ -367,14 +379,15 @@ def run_validation(
     print("  All sanity checks passed [OK]")
 
     # --- Save validation plots -----------------------------------------------
-    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
-    _save_trajectory_plots(seq_df, flags_df)
-    print(f"  Trajectory plots saved to {PLOTS_DIR.relative_to(ROOT)}")
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    _save_trajectory_plots(seq_df, flags_df, plots_dir)
+    print(f"  Trajectory plots saved to {plots_dir.relative_to(ROOT)}")
 
 
 def _save_trajectory_plots(
     seq_df: pd.DataFrame,
     flags_df: pd.DataFrame,
+    output_dir: Path,
     n_plots: int = 15,
 ) -> None:
     """Save individual borrower trajectory plots (stress, balance, emi_status)."""
@@ -414,11 +427,24 @@ def _save_trajectory_plots(
         axes[2].set_xlabel("month")
 
         plt.tight_layout()
-        plt.savefig(PLOTS_DIR / f"trajectory_loan{lid}.png", dpi=100)
+        plt.savefig(output_dir / f"trajectory_loan{lid}.png", dpi=100)
         plt.close(fig)
 
 
 # ── Full run (chunked parquet writer) ─────────────────────────────────────────
+
+def make_loan_rngs(seed: int, loan_ids: list | np.ndarray) -> list[np.random.Generator]:
+    """Create deterministic, chunk-independent random streams keyed by loan_id."""
+    return [
+        np.random.default_rng(np.random.SeedSequence([int(seed), int(loan_id)]))
+        for loan_id in loan_ids
+    ]
+
+
+def tagged_path(path: Path, output_tag: str | None) -> Path:
+    if not output_tag:
+        return path
+    return path.with_name(f"{path.stem}_{output_tag}{path.suffix}")
 
 def run_full_generation(
     df_static: pd.DataFrame,
@@ -438,7 +464,6 @@ def run_full_generation(
     if out_path.exists():
         out_path.unlink()
 
-    rng        = np.random.default_rng(seed)
     writer     = None
     total_rows = 0
     n_chunks   = (len(df_static) + chunk_size - 1) // chunk_size
@@ -451,9 +476,10 @@ def run_full_generation(
         end   = min(start + chunk_size, len(df_static))
         chunk = df_static.iloc[start:end]
 
+        rngs = make_loan_rngs(seed, chunk["loan_id"].to_numpy())
         seq_df = generate_sequences_for_chunk(
             chunk, alpha, p_shock_default, p_shock_nondefault,
-            max_seq_len, max_delay_days, rng,
+            max_seq_len, max_delay_days, rngs,
         )
 
         # Convert emi_status to string for Arrow compatibility
@@ -487,6 +513,12 @@ def parse_args():
     p.add_argument("--max-delay-days",    type=int,   default=DEFAULT_MAX_DELAY_DAYS)
     p.add_argument("--chunk-size",        type=int,   default=DEFAULT_CHUNK_SIZE)
     p.add_argument("--seed",              type=int,   default=DEFAULT_SEED)
+    p.add_argument("--loan-ids-file",     type=Path,  default=None,
+                   help="Parquet file with the fixed loan_id set to generate")
+    p.add_argument("--output-tag",         type=str,   default=None,
+                   help="Append a tag to generated parquet, manifest, and plot paths")
+    p.add_argument("--skip-ablation",       action="store_true",
+                   help="Generate only the configured alpha run; do not run alpha=0")
     p.add_argument("--sample",            type=int,   default=None,
                    help="Only generate for N borrowers (for testing)")
     p.add_argument("--validate-only",     action="store_true",
@@ -496,6 +528,14 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.sample and args.loan_ids_file:
+        raise ValueError("Use either --sample or --loan-ids-file, not both")
+    if args.output_tag and not re.fullmatch(r"[A-Za-z0-9_-]+", args.output_tag):
+        raise ValueError("--output-tag may contain only letters, digits, '_' and '-'")
+
+    manifest_out = tagged_path(MANIFEST_OUT, args.output_tag)
+    plots_dir = (REPORTS_DIR / f"generator_validation_plots_{args.output_tag}"
+                 if args.output_tag else PLOTS_DIR)
 
     print("=" * 64)
     print("Phase 3A — Synthetic Behavioural Sequence Generator")
@@ -511,6 +551,23 @@ def main():
         df = df.reset_index().rename(columns={"index": "loan_id"})
     else:
         df["loan_id"] = df["loan_id"].astype(int)
+
+    if args.loan_ids_file:
+        requested = pd.read_parquet(args.loan_ids_file)
+        if "loan_id" not in requested.columns:
+            raise KeyError(f"{args.loan_ids_file} has no loan_id column")
+        requested_ids = requested["loan_id"].astype("int64")
+        if requested_ids.duplicated().any():
+            raise ValueError("--loan-ids-file contains duplicate loan_id values")
+        available_ids = set(df["loan_id"].astype("int64"))
+        missing_ids = set(requested_ids) - available_ids
+        if missing_ids:
+            raise ValueError(f"{len(missing_ids):,} requested loan_ids are absent from clean data")
+        requested_set = set(requested_ids)
+        df = df[df["loan_id"].isin(requested_set)].copy()
+        if len(df) != len(requested_ids):
+            raise ValueError("Not all requested loan_ids were selected exactly once")
+        print(f"  Fixed borrower IDs: {len(df):,} from {args.loan_ids_file}")
 
     # Ensure term column is numeric
     if df["term"].dtype == object:
@@ -534,6 +591,7 @@ def main():
         df, args.alpha, args.p_shock_default, args.p_shock_nondefault,
         args.max_seq_len, args.max_delay_days, val_rng,
         n_sample=min(2000, len(df)),
+        plots_dir=plots_dir,
     )
 
     if args.validate_only:
@@ -541,8 +599,7 @@ def main():
         return
 
     # Main run (alpha = config value)
-    main_out = SYNTH_DIR / "behavioural_sequences.parquet"
-    rng_main = np.random.default_rng(args.seed)
+    main_out = tagged_path(SYNTH_DIR / "behavioural_sequences.parquet", args.output_tag)
     n_rows_main = run_full_generation(
         df, args.alpha,
         args.p_shock_default, args.p_shock_nondefault,
@@ -550,20 +607,23 @@ def main():
         args.chunk_size, args.seed, main_out,
     )
 
-    # Ablation run (alpha = 0 — pure independent shock, no static component)
-    print("\nRunning ablation companion (alpha=0)...")
-    ablation_out = SYNTH_DIR / "behavioural_sequences_alpha0.parquet"
-    rng_abl = np.random.default_rng(args.seed)
-    n_rows_abl = run_full_generation(
-        df, alpha=0.0,
-        p_shock_default=args.p_shock_default,
-        p_shock_nondefault=args.p_shock_nondefault,
-        max_seq_len=args.max_seq_len,
-        max_delay_days=args.max_delay_days,
-        chunk_size=args.chunk_size,
-        seed=args.seed,
-        out_path=ablation_out,
-    )
+    ablation_out = tagged_path(SYNTH_DIR / "behavioural_sequences_alpha0.parquet", args.output_tag)
+    n_rows_abl = None
+    if args.skip_ablation:
+        print("\nAlpha-zero ablation skipped by --skip-ablation.")
+    else:
+        # Ablation run (alpha = 0 — pure independent shock, no static component)
+        print("\nRunning ablation companion (alpha=0)...")
+        n_rows_abl = run_full_generation(
+            df, alpha=0.0,
+            p_shock_default=args.p_shock_default,
+            p_shock_nondefault=args.p_shock_nondefault,
+            max_seq_len=args.max_seq_len,
+            max_delay_days=args.max_delay_days,
+            chunk_size=args.chunk_size,
+            seed=args.seed,
+            out_path=ablation_out,
+        )
 
     # Manifest
     manifest = {
@@ -574,20 +634,27 @@ def main():
         "max_sequence_length": args.max_seq_len,
         "chunk_size":          args.chunk_size,
         "random_seed":         args.seed,
+        "rng_seed_strategy":   "SeedSequence([random_seed, loan_id])",
+        "output_tag":          args.output_tag,
+        "loan_ids_file":       str(args.loan_ids_file) if args.loan_ids_file else None,
+        "ablation_skipped":    args.skip_ablation,
         "main_run_rows":       n_rows_main,
         "ablation_run_rows":   n_rows_abl,
         "generated_at":        datetime.utcnow().isoformat() + "Z",
     }
-    with open(MANIFEST_OUT, "w") as f:
+    with open(manifest_out, "w") as f:
         json.dump(manifest, f, indent=2)
-    print(f"\nManifest → {MANIFEST_OUT.relative_to(ROOT)}")
+    print(f"\nManifest → {manifest_out.relative_to(ROOT)}")
 
     print("\n" + "=" * 64)
     print("Phase 3A complete.")
     print(f"  Main run   : {n_rows_main:,} rows → {main_out.relative_to(ROOT)}")
-    print(f"  Ablation   : {n_rows_abl:,} rows → {ablation_out.relative_to(ROOT)}")
-    print(f"  Plots      : {PLOTS_DIR.relative_to(ROOT)}")
-    print(f"  Manifest   : {MANIFEST_OUT.relative_to(ROOT)}")
+    if n_rows_abl is not None:
+        print(f"  Ablation   : {n_rows_abl:,} rows → {ablation_out.relative_to(ROOT)}")
+    else:
+        print("  Ablation   : skipped")
+    print(f"  Plots      : {plots_dir.relative_to(ROOT)}")
+    print(f"  Manifest   : {manifest_out.relative_to(ROOT)}")
     print("=" * 64)
 
 

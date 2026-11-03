@@ -1,0 +1,58 @@
+{
+  "model": "Static XGBoost \u2014 200,000 borrower subsample",
+  "train_rows": 140000,
+  "test_rows": 60000,
+  "id_file": "data\\processed\\subsample_loan_ids.parquet",
+  "encoding": "baseline_xgboost.preprocess_features",
+  "hyperparameters": {
+    "max_depth": 6,
+    "min_child_weight": 5,
+    "gamma": 10,
+    "objective": "binary:logistic",
+    "eval_metric": "auc",
+    "n_estimators": 300,
+    "learning_rate": 0.1,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "random_state": 42,
+    "n_jobs": -1
+  },
+  "results": [
+    {
+      "label": "XGBoost vanilla \u2014 200k fixed-ID subset",
+      "auc_roc": 0.7254,
+      "f1": 0.1624,
+      "precision": 0.5704,
+      "recall": 0.0947,
+      "confusion_matrix": [
+        [
+          47021,
+          864
+        ],
+        [
+          10968,
+          1147
+        ]
+      ],
+      "pr_auc": 0.4018
+    },
+    {
+      "label": "XGBoost scale_pos_weight \u2014 200k fixed-ID subset",
+      "auc_roc": 0.7248,
+      "f1": 0.4441,
+      "precision": 0.341,
+      "recall": 0.6366,
+      "confusion_matrix": [
+        [
+          32984,
+          14901
+        ],
+        [
+          4403,
+          7712
+        ]
+      ],
+      "pr_auc": 0.4009
+    }
+  ]
+}

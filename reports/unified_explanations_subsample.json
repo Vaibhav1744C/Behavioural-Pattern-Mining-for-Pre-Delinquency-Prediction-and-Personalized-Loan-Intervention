@@ -1,0 +1,1752 @@
+[
+  {
+    "loan_id": 24,
+    "true_label": 1,
+    "predicted_prob": 0.07922220230102539,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Very Low, +0.3169)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.23833
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.16907
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.13256
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24034
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.2169
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.18182
+      }
+    ]
+  },
+  {
+    "loan_id": 109,
+    "true_label": 0,
+    "predicted_prob": 0.10134384036064148,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.4054)",
+    "top_static_drivers": [
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.22577
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.12457
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.11279
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.18054
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.17119
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.14769
+      }
+    ]
+  },
+  {
+    "loan_id": 111,
+    "true_label": 0,
+    "predicted_prob": 0.05315246060490608,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.2126)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.57148
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.20157
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.18951
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.56211
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.21929
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.16855
+      }
+    ]
+  },
+  {
+    "loan_id": 218,
+    "true_label": 0,
+    "predicted_prob": 0.5250735878944397,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Medium, +0.1003)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.3076
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.28713
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.28357
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 1.02942
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.36457
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.29428
+      }
+    ]
+  },
+  {
+    "loan_id": 270,
+    "true_label": 1,
+    "predicted_prob": 0.23382556438446045,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Low, -0.0647)",
+    "top_static_drivers": [
+      {
+        "feature": "purpose_small_business",
+        "shap_value": 0.40894
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.28953
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.20267
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "purpose_small_business",
+        "shap_value": 0.35568
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.30125
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.28202
+      }
+    ]
+  },
+  {
+    "loan_id": 312,
+    "true_label": 0,
+    "predicted_prob": 0.06966560333967209,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.2787)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.37508
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.28652
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": -0.15524
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.35553
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.26269
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.15184
+      }
+    ]
+  },
+  {
+    "loan_id": 341,
+    "true_label": 0,
+    "predicted_prob": 0.3231770992279053,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, +0.2927)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19254
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.13576
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.11296
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 1.05483
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.20179
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.1209
+      }
+    ]
+  },
+  {
+    "loan_id": 348,
+    "true_label": 1,
+    "predicted_prob": 0.1306319534778595,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Low, -0.4775)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.21755
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.17774
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.11872
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.20503
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.17501
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.14659
+      }
+    ]
+  },
+  {
+    "loan_id": 364,
+    "true_label": 0,
+    "predicted_prob": 0.13185302913188934,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.4726)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.24582
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.22514
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.1376
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.28674
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.22777
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19845
+      }
+    ]
+  },
+  {
+    "loan_id": 395,
+    "true_label": 0,
+    "predicted_prob": 0.0700455904006958,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.2802)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.23596
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.19773
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.12494
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.25492
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.22707
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.21817
+      }
+    ]
+  },
+  {
+    "loan_id": 402,
+    "true_label": 0,
+    "predicted_prob": 0.13210469484329224,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.4716)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.23286
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.22178
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.1386
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.2841
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.23381
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.17882
+      }
+    ]
+  },
+  {
+    "loan_id": 456,
+    "true_label": 0,
+    "predicted_prob": 0.048970021307468414,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.1959)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.32923
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": -0.18418
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.17979
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.29324
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.25328
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.2025
+      }
+    ]
+  },
+  {
+    "loan_id": 470,
+    "true_label": 0,
+    "predicted_prob": 0.10016777366399765,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.4007)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19707
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.16042
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.14784
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24068
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.16872
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.16604
+      }
+    ]
+  },
+  {
+    "loan_id": 481,
+    "true_label": 0,
+    "predicted_prob": 0.06962696462869644,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.2785)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.31762
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.2246
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.13369
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.33954
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.26116
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.21178
+      }
+    ]
+  },
+  {
+    "loan_id": 500,
+    "true_label": 0,
+    "predicted_prob": 0.12002353370189667,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.4801)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19898
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.12197
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.10771
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.26898
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.18862
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.12295
+      }
+    ]
+  },
+  {
+    "loan_id": 539,
+    "true_label": 1,
+    "predicted_prob": 0.5560535788536072,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Medium, +0.2242)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.35046
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.25555
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.2418
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 0.91015
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.40601
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.26411
+      }
+    ]
+  },
+  {
+    "loan_id": 602,
+    "true_label": 1,
+    "predicted_prob": 0.34974217414855957,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Low, +0.3990)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.42792
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.3036
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.21258
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.52704
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.27073
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.25562
+      }
+    ]
+  },
+  {
+    "loan_id": 714,
+    "true_label": 0,
+    "predicted_prob": 0.3717767894268036,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, +0.4871)",
+    "top_static_drivers": [
+      {
+        "feature": "purpose_small_business",
+        "shap_value": 0.47952
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.33681
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.29387
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "purpose_small_business",
+        "shap_value": 0.42516
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.35289
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.30833
+      }
+    ]
+  },
+  {
+    "loan_id": 798,
+    "true_label": 1,
+    "predicted_prob": 0.2712845802307129,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Low, +0.0851)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.52351
+      },
+      {
+        "feature": "dti",
+        "shap_value": 0.19999
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.1944
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 1.05564
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.60279
+      },
+      {
+        "feature": "dti",
+        "shap_value": 0.27234
+      }
+    ]
+  },
+  {
+    "loan_id": 896,
+    "true_label": 0,
+    "predicted_prob": 0.06951624900102615,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.2781)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.29647
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.1816
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": -0.14038
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.3032
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24383
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.21696
+      }
+    ]
+  },
+  {
+    "loan_id": 919,
+    "true_label": 0,
+    "predicted_prob": 0.15710510313510895,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.3716)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.39338
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.22133
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.17297
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 0.90189
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.47644
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.24424
+      }
+    ]
+  },
+  {
+    "loan_id": 970,
+    "true_label": 0,
+    "predicted_prob": 0.2258770614862442,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.0965)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.37725
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.25621
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.24864
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.46236
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.28194
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.24744
+      }
+    ]
+  },
+  {
+    "loan_id": 996,
+    "true_label": 0,
+    "predicted_prob": 0.09130451083183289,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.3652)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.3449
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.1622
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.14271
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.30697
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24088
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.14353
+      }
+    ]
+  },
+  {
+    "loan_id": 1009,
+    "true_label": 0,
+    "predicted_prob": 0.15220585465431213,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.3912)",
+    "top_static_drivers": [
+      {
+        "feature": "term",
+        "shap_value": 0.32576
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.31354
+      },
+      {
+        "feature": "inq_last_6mths",
+        "shap_value": 0.17571
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "term",
+        "shap_value": 0.30828
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.30609
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24549
+      }
+    ]
+  },
+  {
+    "loan_id": 1021,
+    "true_label": 0,
+    "predicted_prob": 0.07997254282236099,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.3199)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.30223
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.18277
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": -0.14619
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.27913
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24614
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.20764
+      }
+    ]
+  },
+  {
+    "loan_id": 1030,
+    "true_label": 1,
+    "predicted_prob": 0.24782559275627136,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Low, -0.0087)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.42745
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.36685
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.18397
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.52028
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.31245
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24698
+      }
+    ]
+  },
+  {
+    "loan_id": 1058,
+    "true_label": 0,
+    "predicted_prob": 0.1005174070596695,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.4021)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.21705
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.13768
+      },
+      {
+        "feature": "grade",
+        "shap_value": 0.10201
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.22168
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19543
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.13437
+      }
+    ]
+  },
+  {
+    "loan_id": 1107,
+    "true_label": 0,
+    "predicted_prob": 0.16571630537509918,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.3371)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.31601
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.29715
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.24331
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.41535
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.28574
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.27976
+      }
+    ]
+  },
+  {
+    "loan_id": 1116,
+    "true_label": 0,
+    "predicted_prob": 0.4253551661968231,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Medium, -0.2986)",
+    "top_static_drivers": [
+      {
+        "feature": "term",
+        "shap_value": 0.31677
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.26979
+      },
+      {
+        "feature": "grade",
+        "shap_value": 0.11073
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 1.00146
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.31994
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.28663
+      }
+    ]
+  },
+  {
+    "loan_id": 1129,
+    "true_label": 0,
+    "predicted_prob": 0.20945635437965393,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.1622)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.36314
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.3007
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.27532
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.3189
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.29502
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.29274
+      }
+    ]
+  },
+  {
+    "loan_id": 1166,
+    "true_label": 1,
+    "predicted_prob": 0.3036727011203766,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Low, +0.2147)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.36805
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.33822
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.22019
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 0.91996
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.46477
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.32078
+      }
+    ]
+  },
+  {
+    "loan_id": 1196,
+    "true_label": 1,
+    "predicted_prob": 0.0765041932463646,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Very Low, +0.3060)",
+    "top_static_drivers": [
+      {
+        "feature": "purpose_small_business",
+        "shap_value": 0.46996
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.46036
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19435
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "purpose_small_business",
+        "shap_value": 0.44646
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.39941
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.24761
+      }
+    ]
+  },
+  {
+    "loan_id": 1206,
+    "true_label": 0,
+    "predicted_prob": 0.11151457577943802,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.4461)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.27233
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.14378
+      },
+      {
+        "feature": "dti",
+        "shap_value": -0.13434
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.27461
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.18649
+      },
+      {
+        "feature": "dti",
+        "shap_value": -0.15672
+      }
+    ]
+  },
+  {
+    "loan_id": 1219,
+    "true_label": 1,
+    "predicted_prob": 0.13811857998371124,
+    "predicted_correct": false,
+    "predicted_risk_linguistic": "(Low, -0.4475)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.54762
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.18537
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.18039
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 1.02566
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.61603
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.19619
+      }
+    ]
+  },
+  {
+    "loan_id": 1220,
+    "true_label": 0,
+    "predicted_prob": 0.2190188318490982,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.1239)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.36634
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.34521
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.24967
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.45501
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.29907
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.2718
+      }
+    ]
+  },
+  {
+    "loan_id": 1247,
+    "true_label": 0,
+    "predicted_prob": 0.03908919543027878,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.1564)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.48926
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.22335
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.17918
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.46464
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.27201
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19176
+      }
+    ]
+  },
+  {
+    "loan_id": 1253,
+    "true_label": 0,
+    "predicted_prob": 0.23527732491493225,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.0589)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.3277
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.27856
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.22677
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.39134
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.28582
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.25861
+      }
+    ]
+  },
+  {
+    "loan_id": 1296,
+    "true_label": 0,
+    "predicted_prob": 0.14870929718017578,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.4052)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.37793
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.35549
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.32889
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.35894
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.30915
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.26697
+      }
+    ]
+  },
+  {
+    "loan_id": 1310,
+    "true_label": 0,
+    "predicted_prob": 0.1381518393754959,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.4474)",
+    "top_static_drivers": [
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.19454
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.13939
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.13253
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.25815
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.1372
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.12186
+      }
+    ]
+  },
+  {
+    "loan_id": 1311,
+    "true_label": 0,
+    "predicted_prob": 0.03931831568479538,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.1573)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.67691
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.24682
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.23465
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.61081
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.3605
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.22125
+      }
+    ]
+  },
+  {
+    "loan_id": 1445,
+    "true_label": 0,
+    "predicted_prob": 0.03846276178956032,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.1539)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.54816
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.17838
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.17244
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.53664
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.29337
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.25824
+      }
+    ]
+  },
+  {
+    "loan_id": 1448,
+    "true_label": 0,
+    "predicted_prob": 0.26931247115135193,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, +0.0772)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.20916
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.18367
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.15596
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 0.82967
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.26601
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.21638
+      }
+    ]
+  },
+  {
+    "loan_id": 1475,
+    "true_label": 0,
+    "predicted_prob": 0.31258803606033325,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, +0.2504)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.45533
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.34247
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.20316
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.54172
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.26351
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.24816
+      }
+    ]
+  },
+  {
+    "loan_id": 1492,
+    "true_label": 0,
+    "predicted_prob": 0.07377243041992188,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.2951)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.47947
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.18807
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.16082
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.41148
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.16374
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.15333
+      }
+    ]
+  },
+  {
+    "loan_id": 1496,
+    "true_label": 0,
+    "predicted_prob": 0.0297545175999403,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.1190)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.64786
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.25245
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.21574
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.56888
+      },
+      {
+        "feature": "int_rate",
+        "shap_value": -0.33511
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.27343
+      }
+    ]
+  },
+  {
+    "loan_id": 1527,
+    "true_label": 0,
+    "predicted_prob": 0.08608702570199966,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.3443)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.4367
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.29469
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.25538
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.36253
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.2444
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.24429
+      }
+    ]
+  },
+  {
+    "loan_id": 1573,
+    "true_label": 0,
+    "predicted_prob": 0.2707400619983673,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, +0.0830)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.23891
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": -0.1482
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.14471
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": 0.95406
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.2779
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": -0.17449
+      }
+    ]
+  },
+  {
+    "loan_id": 1589,
+    "true_label": 0,
+    "predicted_prob": 0.13475410640239716,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.4610)",
+    "top_static_drivers": [
+      {
+        "feature": "issue_d",
+        "shap_value": -0.22302
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.21583
+      },
+      {
+        "feature": "term",
+        "shap_value": -0.13338
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.28794
+      },
+      {
+        "feature": "sub_grade",
+        "shap_value": 0.22897
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.18121
+      }
+    ]
+  },
+  {
+    "loan_id": 1606,
+    "true_label": 0,
+    "predicted_prob": 0.07002996653318405,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Very Low, +0.2801)",
+    "top_static_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.31073
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.20254
+      },
+      {
+        "feature": "grade",
+        "shap_value": -0.13852
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "sub_grade",
+        "shap_value": -0.31596
+      },
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.27069
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.1977
+      }
+    ]
+  },
+  {
+    "loan_id": 1649,
+    "true_label": 0,
+    "predicted_prob": 0.13192255795001984,
+    "predicted_correct": true,
+    "predicted_risk_linguistic": "(Low, -0.4723)",
+    "top_static_drivers": [
+      {
+        "feature": "term",
+        "shap_value": 0.25515
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.20246
+      },
+      {
+        "feature": "annual_inc",
+        "shap_value": 0.15096
+      }
+    ],
+    "top_behavioural_drivers": [
+      {
+        "feature": "salary_delay_trend",
+        "shap_value": -0.29934
+      },
+      {
+        "feature": "term",
+        "shap_value": 0.26288
+      },
+      {
+        "feature": "issue_d",
+        "shap_value": -0.19909
+      }
+    ]
+  }
+]

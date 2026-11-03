@@ -1,0 +1,47 @@
+{
+  "model": "XGBoost static+behavioural",
+  "train_rows": 140000,
+  "test_rows": 60000,
+  "static_only_baseline_auc": 0.7345,
+  "n_features": 76,
+  "n_static": 70,
+  "n_behavioural": 7,
+  "results": [
+    {
+      "label": "XGBoost static+behavioural (vanilla)",
+      "auc_roc": 0.7255,
+      "pr_auc": 0.4009,
+      "f1": 0.1708,
+      "precision": 0.5841,
+      "recall": 0.1,
+      "confusion_matrix": [
+        [
+          47022,
+          863
+        ],
+        [
+          10903,
+          1212
+        ]
+      ]
+    },
+    {
+      "label": "XGBoost static+behavioural + scale_pos_weight",
+      "auc_roc": 0.7237,
+      "pr_auc": 0.399,
+      "f1": 0.4413,
+      "precision": 0.3403,
+      "recall": 0.6277,
+      "confusion_matrix": [
+        [
+          33141,
+          14744
+        ],
+        [
+          4510,
+          7605
+        ]
+      ]
+    }
+  ]
+}
