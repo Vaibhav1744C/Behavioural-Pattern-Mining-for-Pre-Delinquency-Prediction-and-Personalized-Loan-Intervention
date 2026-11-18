@@ -22,6 +22,8 @@ Usage:
 from pathlib import Path
 
 import pandas as pd
+import pyarrow.parquet as pq
+import pyarrow as pa
 
 # --------------------------------------------------------------------------
 # Paths
@@ -152,78 +154,112 @@ def main() -> None:
 
     audit: list[dict] = []
 
-    print("Loading raw parquet...")
-    df = pd.read_parquet(RAW_PARQUET)
-    n_cols_start = df.shape[1]
-    print(f"  loaded: {df.shape[0]:,} rows x {n_cols_start} columns")
+    # ---- Pass 1: read schema + compute missing fractions via chunked scan --
+    print("Scanning parquet schema and missing fractions (chunked, low-RAM)...")
+    pf = pq.ParquetFile(RAW_PARQUET)
+    n_cols_start = len(pf.schema_arrow.names)
+    col_names = pf.schema_arrow.names
+    print(f"  columns in raw file: {n_cols_start}")
 
-    # ---- Criterion 1: resolved loans only + target -----------------------
-    print("\n[1/3] Filtering to resolved loans and building target...")
-    n_rows_start = len(df)
-    df = build_target(df)
-    rate = df["early_default"].mean()
-    print(f"  kept {len(df):,} of {n_rows_start:,} loans "
-          f"({len(df) / n_rows_start:.1%})")
-    print(f"  early-default rate: {rate:.2%}  (paper reports 20.20%)")
-    print(f"  paper kept 806,161 loans — ours: {len(df):,}")
+    # Accumulate null counts and total rows across batches
+    null_counts = {c: 0 for c in col_names}
+    n_rows_start = 0
+    BATCH = 200_000
+    for batch in pf.iter_batches(batch_size=BATCH):
+        df_batch = batch.to_pandas()
+        n_rows_start += len(df_batch)
+        for c in col_names:
+            if c in df_batch.columns:
+                null_counts[c] += int(df_batch[c].isna().sum())
 
-    # loan_status has served its purpose; keeping it would leak the target
-    df = df.drop(columns=["loan_status"])
-    audit.append({"column": "loan_status", "reason": "target source (dropped after target construction)"})
+    print(f"  total rows in raw file: {n_rows_start:,}")
 
-    # ---- Criterion 2: leaky columns --------------------------------------
-    print("\n[2/3] Dropping leaky / non-predictive columns...")
+    # ---- Determine columns to drop upfront --------------------------------
+
+    # Criterion 2: leaky
     reason_by_group = [
-        (LEAKY_PAYMENT, "leaky: repayment activity (post-disbursement)"),
-        (LEAKY_POST_ORIGINATION_CREDIT, "leaky: credit data refreshed post-origination"),
-        (LEAKY_HARDSHIP, "leaky: hardship programme (post-distress)"),
-        (LEAKY_SETTLEMENT, "leaky: debt settlement (post-default)"),
-        (IDENTIFIERS_AND_FREETEXT, "identifier or free text (not used by base paper)"),
-        (FUNDING_MECHANICS, "leaky: investor funding mechanics"),
+        (LEAKY_PAYMENT,                "leaky: repayment activity (post-disbursement)"),
+        (LEAKY_POST_ORIGINATION_CREDIT,"leaky: credit data refreshed post-origination"),
+        (LEAKY_HARDSHIP,               "leaky: hardship programme (post-distress)"),
+        (LEAKY_SETTLEMENT,             "leaky: debt settlement (post-default)"),
+        (IDENTIFIERS_AND_FREETEXT,     "identifier or free text (not used by base paper)"),
+        (FUNDING_MECHANICS,            "leaky: investor funding mechanics"),
     ]
-    to_drop = []
+    leaky_drop = set()
     for group, reason in reason_by_group:
         for c in group:
-            if c in df.columns and c not in to_drop:
+            if c in col_names and c not in leaky_drop:
                 audit.append({"column": c, "reason": reason})
-                to_drop.append(c)
-    df = df.drop(columns=to_drop)
-    print(f"  dropped {len(to_drop)} columns")
+                leaky_drop.add(c)
+    audit.append({"column": "loan_status",
+                  "reason": "target source (dropped after target construction)"})
 
-    missing_from_list = [c for c in LEAKY_COLUMNS if c not in df.columns and c not in to_drop]
-    if missing_from_list:
-        print(f"  note: {len(missing_from_list)} listed columns were not in the "
-              f"data (harmless): {missing_from_list[:5]}...")
+    # Criterion 3: >40% missing
+    sparse_drop = set()
+    for c, nc in null_counts.items():
+        frac = nc / n_rows_start if n_rows_start else 0
+        if frac > MISSING_THRESHOLD and c not in leaky_drop and c != "loan_status":
+            audit.append({"column": c,
+                          "reason": f"{frac:.1%} missing (>{MISSING_THRESHOLD:.0%})"})
+            sparse_drop.add(c)
 
-    # ---- Criterion 3: >40% missing ---------------------------------------
-    print(f"\n[3/3] Dropping columns with >{MISSING_THRESHOLD:.0%} missing...")
-    missing_frac = df.isna().mean()
-    sparse = missing_frac[missing_frac > MISSING_THRESHOLD].sort_values(ascending=False)
-    for c, frac in sparse.items():
-        audit.append({"column": c, "reason": f"{frac:.1%} missing (>{MISSING_THRESHOLD:.0%})"})
-    df = df.drop(columns=list(sparse.index))
-    print(f"  dropped {len(sparse)} columns")
+    all_drop = leaky_drop | sparse_drop | {"loan_status"}
+    keep_cols = [c for c in col_names if c not in all_drop]
+    print(f"\n  leaky cols to drop   : {len(leaky_drop)}")
+    print(f"  sparse cols to drop  : {len(sparse_drop)}")
+    print(f"  columns to keep      : {len(keep_cols)}")
 
-    # ---- Save -------------------------------------------------------------
-    df.to_parquet(OUT_PARQUET, index=False)
+    # ---- Pass 2: filter rows + write output in chunks ---------------------
+    print("\nFiltering rows and writing cleaned parquet (chunked)...")
+    writer = None
+    n_kept = 0
+    default_count = 0
+
+    for batch in pf.iter_batches(batch_size=BATCH, columns=keep_cols + ["loan_status"]):
+        df_batch = batch.to_pandas()
+
+        # Criterion 1: keep only resolved loans + build target
+        status = df_batch["loan_status"].astype("string").str.strip()
+        keep_mask = status.isin(STATUS_DEFAULT + STATUS_PAID)
+        df_batch = df_batch.loc[keep_mask].copy()
+        if df_batch.empty:
+            continue
+        status = status.loc[keep_mask]
+        df_batch["early_default"] = status.isin(STATUS_DEFAULT).astype("int8")
+        df_batch = df_batch.drop(columns=["loan_status"])
+
+        n_kept += len(df_batch)
+        default_count += int(df_batch["early_default"].sum())
+
+        # Write chunk
+        table = pa.Table.from_pandas(df_batch, preserve_index=False)
+        if writer is None:
+            writer = pq.ParquetWriter(OUT_PARQUET, table.schema)
+        writer.write_table(table)
+        print(f"  rows kept so far: {n_kept:,}", end="\r")
+
+    if writer:
+        writer.close()
+
+    rate = default_count / n_kept if n_kept else 0
+    n_cols_end = len(keep_cols) + 1  # +1 for early_default
+
+    # Save audit
     pd.DataFrame(audit).to_csv(AUDIT_CSV, index=False)
 
-    n_cols_end = df.shape[1]
-    print("\n" + "=" * 62)
-    print(f"  columns: {n_cols_start} -> {n_cols_end}   (paper: 141 -> 57)")
-    print(f"  rows:    {len(df):,}")
-    print(f"  saved:   {OUT_PARQUET.relative_to(ROOT)}")
-    print(f"  audit:   {AUDIT_CSV.relative_to(ROOT)}")
-    print("=" * 62)
+    print(f"\n\n{'=' * 62}")
+    print(f"  rows kept        : {n_kept:,}  (of {n_rows_start:,})")
+    print(f"  early-default    : {rate:.2%}  (paper: 20.20%)")
+    print(f"  columns          : {n_cols_start} -> {n_cols_end}  (paper: 141 -> 57)")
+    print(f"  saved            : {OUT_PARQUET.relative_to(ROOT)}")
+    print(f"  audit            : {AUDIT_CSV.relative_to(ROOT)}")
+    print(f"{'=' * 62}")
 
     if n_cols_end != 57:
         print(
             f"\n  NOTE: we have {n_cols_end} columns, the paper reports 57.\n"
-            "  This is EXPECTED — the paper never publishes its column list, so\n"
-            "  an exact match would be coincidence. Report the gap honestly and\n"
-            "  cite reports/cleaning_audit.csv as your documented criteria.\n"
-            "  If the gap is large (>10), review the audit file for columns you\n"
-            "  may want to reclassify."
+            "  This is EXPECTED — the paper never publishes its column list.\n"
+            "  See reports/cleaning_audit.csv for every drop decision.\n"
         )
 
 

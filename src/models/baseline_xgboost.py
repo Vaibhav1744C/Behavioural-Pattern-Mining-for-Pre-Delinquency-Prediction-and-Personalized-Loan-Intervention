@@ -113,18 +113,15 @@ DROP_COLS = ["Unnamed: 0"]
 
 # ── Pre-processing helpers (applied before sklearn pipeline) ──────────────────
 
-def apply_ordinal_mappings(df: pd.DataFrame) -> pd.DataFrame:
-    """Label-encode ordinal columns; unknown values become NaN."""
-    df = df.copy()
+def apply_ordinal_mappings(df: pd.DataFrame) -> None:
+    """Label-encode ordinal columns in-place; unknown values become NaN."""
     for col, mapping in ORDINAL_MAPPINGS.items():
         if col in df.columns:
             df[col] = df[col].map(mapping).astype("float64")
-    return df
 
 
-def convert_date_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Replace date string columns with months-since-reference numeric cols."""
-    df = df.copy()
+def convert_date_cols(df: pd.DataFrame) -> None:
+    """Replace date string columns with months-since-reference numeric cols, in-place."""
     for col in DATE_COLS:
         if col in df.columns:
             cleaned = df[col].astype(str).replace(
@@ -134,12 +131,10 @@ def convert_date_cols(df: pd.DataFrame) -> pd.DataFrame:
             delta = (parsed.dt.year - DATE_REFERENCE.year) * 12 + \
                     (parsed.dt.month - DATE_REFERENCE.month)
             df[col] = delta.astype("float64")
-    return df
 
 
-def convert_pct_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Strip '%' and convert percentage string columns to float64."""
-    df = df.copy()
+def convert_pct_cols(df: pd.DataFrame) -> None:
+    """Strip '%' and convert percentage string columns to float64, in-place."""
     for col in PCT_COLS:
         if col in df.columns:
             cleaned = (
@@ -148,12 +143,10 @@ def convert_pct_cols(df: pd.DataFrame) -> pd.DataFrame:
                 .str.strip()
             )
             df[col] = pd.to_numeric(cleaned, errors="coerce")
-    return df
 
 
-def convert_term_col(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert ' 36 months' / ' 60 months' → numeric 36.0 / 60.0."""
-    df = df.copy()
+def convert_term_col(df: pd.DataFrame) -> None:
+    """Convert ' 36 months' / ' 60 months' → numeric 36.0 / 60.0, in-place."""
     if TERM_COL in df.columns:
         cleaned = (
             df[TERM_COL].astype(str)
@@ -161,21 +154,22 @@ def convert_term_col(df: pd.DataFrame) -> pd.DataFrame:
             .str.strip()
         )
         df[TERM_COL] = pd.to_numeric(cleaned, errors="coerce")
-    return df
 
 
-def drop_junk_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop row-index artifacts and any other no-signal columns."""
-    return df.drop(columns=[c for c in DROP_COLS if c in df.columns])
+def drop_junk_cols(df: pd.DataFrame) -> None:
+    """Drop row-index artifacts in-place."""
+    cols_to_drop = [c for c in DROP_COLS if c in df.columns]
+    if cols_to_drop:
+        df.drop(columns=cols_to_drop, inplace=True)
 
 
 def preprocess_features(X: pd.DataFrame) -> pd.DataFrame:
-    """Apply all pre-pipeline transformations in order."""
-    X = drop_junk_cols(X)
-    X = apply_ordinal_mappings(X)
-    X = convert_date_cols(X)
-    X = convert_pct_cols(X)
-    X = convert_term_col(X)
+    """Apply all pre-pipeline transformations in-place (no full-DataFrame copies)."""
+    drop_junk_cols(X)
+    apply_ordinal_mappings(X)
+    convert_date_cols(X)
+    convert_pct_cols(X)
+    convert_term_col(X)
     return X
 
 
@@ -236,10 +230,11 @@ def main() -> None:
     # Target
     y = df["early_default"].astype("int8")
     X = df.drop(columns=["early_default"])
+    del df  # free memory immediately
 
     # Pre-pipeline transformations
     print("\nApplying pre-pipeline transformations...")
-    X = preprocess_features(X)
+    preprocess_features(X)
     print(f"  shape after transforms: {X.shape}")
 
     # 70/30 split — paper Section 4.4

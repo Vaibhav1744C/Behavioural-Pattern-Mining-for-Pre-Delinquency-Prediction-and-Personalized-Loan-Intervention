@@ -347,6 +347,9 @@ def parse_args():
                    help="Only process N borrowers (for testing)")
     p.add_argument("--loan-ids-file", type=str, default=None,
                    help="Parquet file with the fixed loan_id set to process")
+    p.add_argument("--subsample",   action="store_true",
+                   help="Shorthand: use data/processed/subsample_loan_ids.parquet as the "
+                        "loan-ids-file and write outputs with _subsample suffix")
     p.add_argument("--chunk-size",  type=int, default=50_000,
                    help="Borrowers per chunk for chunked parquet write")
     return p.parse_args()
@@ -354,6 +357,21 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    # --subsample: shorthand that sets loan-ids-file + forces _subsample suffix
+    if args.subsample:
+        if args.loan_ids_file:
+            raise ValueError("--subsample and --loan-ids-file are mutually exclusive")
+        if args.sample:
+            raise ValueError("--subsample and --sample are mutually exclusive")
+        args.loan_ids_file = str(ROOT / "data" / "processed" / "subsample_loan_ids.parquet")
+        # Override output paths to use _subsample suffix regardless of seq-parquet name
+        global LSTM_OUT, CONTEXT_OUT, REPORT_OUT
+        LSTM_OUT    = ROOT / "data" / "processed" / "lstm_sequences_subsample.parquet"
+        CONTEXT_OUT = ROOT / "data" / "processed" / "sequence_context_features_subsample.parquet"
+        REPORT_OUT  = ROOT / "reports" / "feature_engineering_report_subsample_new.json"
+        print("  [--subsample] Using subsample_loan_ids.parquet → outputs will have _subsample suffix")
+
     if args.sample and args.loan_ids_file:
         raise ValueError("Use either --sample or --loan-ids-file, not both")
 
@@ -365,7 +383,8 @@ def main():
 
     # Derive output paths — if custom seq-parquet given, use a matching suffix
     # e.g. behavioural_sequences_alpha0.parquet → lstm_sequences_alpha0.parquet
-    if args.seq_parquet:
+    # But NOT when --subsample already set explicit output paths above.
+    if args.seq_parquet and not args.subsample:
         suffix = seq_path.stem.replace("behavioural_sequences", "").strip("_") or ""
         suffix = f"_{suffix}" if suffix else ""
         lstm_out    = ROOT / "data" / "processed" / f"lstm_sequences{suffix}.parquet"

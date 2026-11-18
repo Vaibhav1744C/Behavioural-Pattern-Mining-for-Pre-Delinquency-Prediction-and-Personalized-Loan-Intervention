@@ -38,6 +38,8 @@ def run(loan_id: int, risk_result: dict) -> dict:
     output = {"branch_taken": branch, "fuzzy_risk": fuzzy}
     if branch == "SHAP+fuzzy":
         output["display_drivers"] = drivers
+    else:
+        output["display_drivers"] = []  # always present so callers don't need to guard
     return {
         "inputs": {"loan_id": int(loan_id), "confidence_margin": margin,
                    "margin_threshold": FUZZY_ONLY_MARGIN,
